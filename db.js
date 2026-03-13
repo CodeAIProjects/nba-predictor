@@ -15,13 +15,16 @@ async function initDB() {
 
   if (dbUrl) {
     try {
-      const { Client } = require('pg');
+      let Client;
+      try { Client = require('pg').Client; }
+      catch(e) { console.warn('⚠️  pg module not found, using file storage'); throw e; }
       pgClient = new Client({ connectionString: dbUrl, ssl: { rejectUnauthorized: false } });
       await pgClient.connect();
       await createTables();
       console.log('✅ PostgreSQL connected');
       return;
     } catch(e) {
+      pgClient = null;
       console.warn('⚠️  PostgreSQL failed, falling back to file storage:', e.message);
     }
   }
