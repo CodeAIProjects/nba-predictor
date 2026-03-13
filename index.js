@@ -563,19 +563,20 @@ function runBackfillInBackground(days) {
   }
 }
 
-// Init DB then start server
-db.initDB().then(() => {
-  app.listen(PORT, () => {
-    console.log(`🏀 NBA Predictor API running on port ${PORT}`);
-    console.log(`   Odds API: ${ODDS_API_KEY ? '✅ configured' : '❌ not set (add ODDS_API_KEY env var)'}`);
-    console.log(`   BDL API:  ${BDL_API_KEY  ? '✅ configured' : '❌ not set (add BDL_API_KEY env var)'}`);
-    console.log(`   Database: ${process.env.DATABASE_URL ? '✅ PostgreSQL' : '📁 file fallback'}`);
-  });
-
-  // Run backfill in background — doesn't block server startup
-  setTimeout(() => runBackfillInBackground(150), 5000);
-
-}).catch(e => {
-  console.error('Fatal: DB init failed', e.message);
-  process.exit(1);
+// Start server immediately — DB init happens in background
+app.listen(PORT, () => {
+  console.log('🏀 NBA Predictor API running on port ' + PORT);
+  console.log('   Odds API: ' + (ODDS_API_KEY ? '✅ configured' : '❌ not set'));
+  console.log('   BDL API:  ' + (BDL_API_KEY  ? '✅ configured' : '❌ not set'));
+  console.log('   Database: ' + (process.env.DATABASE_URL ? '✅ PostgreSQL' : '📁 file fallback'));
 });
+
+// Init DB after server is already listening — never blocks or crashes server
+db.initDB()
+  .then(() => {
+    console.log('[db] Ready — starting background backfill...');
+    setTimeout(() => runBackfillInBackground(150), 3000);
+  })
+  .catch(e => {
+    console.warn('[db] Init failed (server still running):', e.message);
+  });
