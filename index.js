@@ -130,19 +130,36 @@ const statsCache = {};
 async function fetchTeamInjuries(abbr) {
   const tid = ESPN_TEAM_IDS[abbr];
   if (!tid) return [];
-  const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/injuries`;
-  const data = await safeFetch(url);
-  if (!data?.injuries) return [];
 
-  return data.injuries.map(inj => ({
-    name:   inj.athlete?.displayName || 'Unknown',
-    status: inj.status?.toLowerCase().includes('out') ? 'out'
-          : inj.status?.toLowerCase().includes('doubt') ? 'out'
-          : inj.status?.toLowerCase().includes('quest') ? 'ques'
-          : 'ques',
-    note:   inj.injury?.longComment || inj.longComment || inj.status || '',
+  const urls = [
+    `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/injuries`,
+    `https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/teams/${tid}/injuries?limit=50`,
+  ];
+
+  for (const url of urls) {
+    const data = await safeFetch(url);
+    if (!data) continue;
+    const list = data.injuries || data.items || (Array.isArray(data) ? data : null);
+    if (list && list.length > 0) {
+      console.log(`[injuries] ${abbr} => ${list.length} players from ${url.slice(50,90)}`);
+      return list.map(parseInjury);
+    }
+  }
+  console.log(`[injuries] ${abbr} => none found`);
+  return [];
+}
+
+function parseInjury(inj) {
+  const raw = (inj.status || inj.type?.description || '').toLowerCase();
+  const status = (raw.includes('out') || raw.includes('doubt')) ? 'out'
+               : (raw.includes('quest') || raw.includes('day-to-day') || raw.includes('prob')) ? 'ques'
+               : 'ques';
+  return {
+    name:   inj.athlete?.displayName || inj.athlete?.shortName || 'Unknown',
+    status,
+    note:   inj.injury?.longComment || inj.injury?.description || inj.longComment || inj.detail || raw || '',
     espnId: inj.athlete?.id || '',
-  }));
+  };
 }
 
 // ─── 3. BALLDONTLIE PLAYER STATS ─────────────────────────────────────────────
@@ -186,16 +203,22 @@ async function fetchOdds() {
     const awaySpread = spreads?.outcomes?.find(o => o.name === ev.away_team);
     const over       = totals?.outcomes?.find(o => o.name === 'Over');
 
+    // The favourite is whichever side has a NEGATIVE spread point
+    const homePt = homeSpread?.point ?? null;
+    const awayPt = awaySpread?.point ?? null;
+    const favSide = (homePt !== null && homePt < 0) ? 'home' : 'away';
+    const favPt   = favSide === 'home' ? homePt : awayPt;
+
     return {
-      id:          ev.id,
-      homeTeam:    ev.home_team,
-      awayTeam:    ev.away_team,
+      id:           ev.id,
+      homeTeam:     ev.home_team,
+      awayTeam:     ev.away_team,
       commenceTime: ev.commence_time,
       spread: {
-        home: homeSpread?.point,
-        away: awaySpread?.point,
-        fav:  (homeSpread?.point < 0) ? 'home' : 'away',
-        line: homeSpread?.point,
+        home:    homePt,
+        away:    awayPt,
+        fav:     favSide,
+        line:    favPt !== null ? Math.abs(favPt) : null,  // always positive number
       },
       total: over?.point || null,
     };
@@ -207,14 +230,23 @@ async function fetchOdds() {
 
 // Match odds to a game by team names
 function matchOdds(game, allOdds) {
-  if (!allOdds?.length) return null;
+  if (!allOdds || !allOdds.length) return null;
+  // Build nickname list for each team
+  const homeWords = [
+    game.home.toLowerCase(),
+    ...(game.homeName || '').toLowerCase().split(' '),
+  ].filter(w => w.length > 2);
+  const awayWords = [
+    game.away.toLowerCase(),
+    ...(game.awayName || '').toLowerCase().split(' '),
+  ].filter(w => w.length > 2);
+
   return allOdds.find(o => {
-    const hn = o.homeTeam?.toLowerCase();
-    const an = o.awayTeam?.toLowerCase();
-    return (hn?.includes(game.homeName?.toLowerCase()?.split(' ').pop() || '') ||
-            hn?.includes(game.home?.toLowerCase())) &&
-           (an?.includes(game.awayName?.toLowerCase()?.split(' ').pop() || '') ||
-            an?.includes(game.away?.toLowerCase()));
+    const hn = (o.homeTeam || '').toLowerCase();
+    const an = (o.awayTeam || '').toLowerCase();
+    const homeMatch = homeWords.some(w => hn.includes(w));
+    const awayMatch = awayWords.some(w => an.includes(w));
+    return homeMatch && awayMatch;
   }) || null;
 }
 
@@ -247,9 +279,13 @@ async function assembleGameData(dateStr) {
     return {
       ...game,
       odds: gameOdds ? {
-        spread:     gameOdds.spread.line,
-        spreadFav:  gameOdds.spread.fav === 'home' ? game.home : game.away,
-        total:      gameOdds.total,
+        spread:    gameOdds.spread.line,   // always positive (e.g. 6.5)
+        spreadFav: gameOdds.spread.fav === 'home' ? game.home : game.away,
+        total:     gameOdds.total,
+        raw: {
+          homeSpread: gameOdds.spread.home,
+          awaySpread: gameOdds.spread.away,
+        }
       } : null,
       injuries: {
         [game.home]: homeInj,
@@ -345,6 +381,24 @@ app.get('/api/player-stats', async (req, res) => {
   if (!name) return res.status(400).json({ error: 'name required' });
   const stats = await fetchPlayerAvgPts(name);
   res.json({ name, stats });
+});
+
+// Debug endpoint — see raw injury data for a team
+app.get('/api/debug/injuries/:abbr', async (req, res) => {
+  const abbr = req.params.abbr.toUpperCase();
+  const tid = ESPN_TEAM_IDS[abbr];
+  if (!tid) return res.json({ error: 'Unknown team', abbr });
+  const url1 = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/injuries`;
+  const url2 = `https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/teams/${tid}/injuries?limit=50`;
+  const [d1, d2] = await Promise.all([safeFetch(url1), safeFetch(url2)]);
+  res.json({ abbr, tid, url1: { keys: d1 ? Object.keys(d1) : null, sample: d1 }, url2: { keys: d2 ? Object.keys(d2) : null, sample: d2 } });
+});
+
+// Debug endpoint — see raw odds data
+app.get('/api/debug/odds', async (req, res) => {
+  oddsCache = { data: null, fetchedAt: 0 }; // force refresh
+  const odds = await fetchOdds();
+  res.json({ count: odds.length, sample: odds.slice(0,3) });
 });
 
 // Health check
