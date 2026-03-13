@@ -87,8 +87,11 @@ async function fetchScores(dateStr) {
     const comp    = ev.competitions[0];
     const home    = comp.competitors.find(c => c.homeAway === 'home');
     const away    = comp.competitors.find(c => c.homeAway === 'away');
-    const homeAbbr = ESPN_ABBR[home?.team?.displayName] || home?.team?.abbreviation || '???';
-    const awayAbbr = ESPN_ABBR[away?.team?.displayName] || away?.team?.abbreviation || '???';
+    const ABBR_FIX = {'NY':'NYK','GS':'GSW','SA':'SAS','NO':'NOP','WSH':'WAS','UTAH':'UTA'};
+    const rawHome = ESPN_ABBR[home?.team?.displayName] || home?.team?.abbreviation || '???';
+    const rawAway = ESPN_ABBR[away?.team?.displayName] || away?.team?.abbreviation || '???';
+    const homeAbbr = ABBR_FIX[rawHome] || rawHome;
+    const awayAbbr = ABBR_FIX[rawAway] || rawAway;
     const status   = ev.status?.type?.name; // 'STATUS_SCHEDULED' | 'STATUS_IN_PROGRESS' | 'STATUS_FINAL'
     const period   = ev.status?.period || 0;
     const clock    = ev.status?.displayClock || '';
@@ -293,12 +296,8 @@ async function assembleGameData(dateStr) {
       ...game,
       odds: gameOdds ? {
         spread:    gameOdds.spread.line,   // always positive (e.g. 6.5)
-        spreadFav: gameOdds.spread.fav === 'home' ? game.home : game.away,
+        spreadFav: gameOdds.spread.fav === 'home' ? game.home : game.away,  // always ESPN abbr
         total:     gameOdds.total,
-        raw: {
-          homeSpread: gameOdds.spread.home,
-          awaySpread: gameOdds.spread.away,
-        }
       } : null,
       injuries: {
         [game.home]: homeInj,
