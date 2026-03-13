@@ -197,6 +197,66 @@ async function fetchPlayerAvgPts(playerName, season = '2025-26') {
   return { pts: parseFloat(avg.pts || 0), min: avg.min || '0' };
 }
 
+// ─── 3b. TEAM + PLAYER PPG (BallDontLie) ─────────────────────────────────────
+const ppgCache = {};  // { "PLAYER_NAME": { pts, teamPct } }
+const teamAvgCache = {}; // { "ATL": 114.2 }
+
+async function enrichInjuriesWithPPG(abbr, players) {
+  if (!BDL_API_KEY || !players.length) return players;
+
+  // Get team season avg (for pct calculation)
+  let teamAvg = teamAvgCache[abbr];
+  if (!teamAvg) {
+    // Estimate from team name — BallDontLie team stats
+    const headers = { 'Authorization': BDL_API_KEY };
+    const teamsUrl = 'https://api.balldontlie.io/v1/teams?per_page=30';
+    const teamsData = await safeFetch(teamsUrl, { headers });
+    if (teamsData?.data) {
+      // Find team by abbreviation
+      const team = teamsData.data.find(t =>
+        t.abbreviation === abbr ||
+        t.abbreviation === abbr.replace('NYK','NY').replace('GSW','GS').replace('SAS','SA').replace('NOP','NO').replace('WAS','WSH')
+      );
+      if (team) {
+        const statsUrl = `https://api.balldontlie.io/v1/season_averages/team?season=2025&team_id=${team.id}`;
+        const statsData = await safeFetch(statsUrl, { headers });
+        teamAvg = statsData?.data?.[0]?.pts || 112;
+        teamAvgCache[abbr] = teamAvg;
+      }
+    }
+    if (!teamAvg) teamAvg = 112; // league average fallback
+  }
+
+  // Fetch PPG for each player in parallel
+  const enriched = await Promise.all(players.map(async p => {
+    if (ppgCache[p.name]) {
+      return { ...p, ...ppgCache[p.name] };
+    }
+    try {
+      const headers = { 'Authorization': BDL_API_KEY };
+      const searchUrl = `https://api.balldontlie.io/v1/players?search=${encodeURIComponent(p.name)}&per_page=3`;
+      const res = await safeFetch(searchUrl, { headers });
+      if (!res?.data?.length) return p;
+
+      const pid = res.data[0].id;
+      const avgUrl = `https://api.balldontlie.io/v1/season_averages?season=2025&player_ids[]=${pid}`;
+      const avgRes = await safeFetch(avgUrl, { headers });
+      const pts = parseFloat(avgRes?.data?.[0]?.pts || 0);
+
+      if (pts > 0) {
+        const pct = Math.round((pts / teamAvg) * 100);
+        ppgCache[p.name] = { pts: parseFloat(pts.toFixed(1)), pct };
+        return { ...p, pts: parseFloat(pts.toFixed(1)), pct };
+      }
+    } catch(e) {
+      console.warn('[ppg error]', p.name, e.message);
+    }
+    return p;
+  }));
+
+  return enriched;
+}
+
 // ─── 4. THE ODDS API ─────────────────────────────────────────────────────────
 // Cache odds separately — expensive API calls
 let oddsCache = { data: null, fetchedAt: 0 };
@@ -281,10 +341,14 @@ async function assembleGameData(dateStr) {
   // Collect unique teams playing today
   const teams = [...new Set(games.flatMap(g => [g.home, g.away]))];
 
-  // Fetch all injuries in parallel
+  // Fetch all injuries in parallel, then enrich with PPG
   const injuryResults = await Promise.all(teams.map(t => fetchTeamInjuries(t)));
   const injuryMap = {};
-  teams.forEach((t, i) => { injuryMap[t] = injuryResults[i] || []; });
+  // Enrich with PPG stats from BallDontLie
+  await Promise.all(teams.map(async (t, i) => {
+    const raw = injuryResults[i] || [];
+    injuryMap[t] = await enrichInjuriesWithPPG(t, raw);
+  }));
 
   // Assemble each game
   const assembled = games.map(game => {
