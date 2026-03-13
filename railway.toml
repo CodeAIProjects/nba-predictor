@@ -7,4 +7,4 @@ restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
 
 [[deploy.preDeployCommands]]
-command = "node backfill.js --days=30"
+command = "node backfill.js --days=150"
