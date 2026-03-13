@@ -544,19 +544,22 @@ app.get('*', (req, res) => {
 
 // ── BACKGROUND BACKFILL ──────────────────────────────────────────────────────
 // Runs once at startup to load recent history. Non-blocking — server starts immediately.
-async function runBackfillInBackground(days) {
+function runBackfillInBackground(days) {
   try {
-    console.log(`[backfill] Starting background backfill for last ${days} days...`);
-    const { execFile } = require('child_process');
-    const child = execFile('node', ['backfill.js', `--days=${days}`], {
+    console.log('[backfill] Starting in background for last ' + days + ' days...');
+    const { spawn } = require('child_process');
+    const child = spawn('node', ['backfill.js', '--days=' + days], {
       cwd: __dirname,
       env: process.env,
+      detached: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
     child.stdout.on('data', d => process.stdout.write('[backfill] ' + d));
     child.stderr.on('data', d => process.stderr.write('[backfill] ' + d));
-    child.on('close', code => console.log(`[backfill] Finished with code ${code}`));
+    child.on('error', e => console.warn('[backfill] spawn error:', e.message));
+    child.on('close', code => console.log('[backfill] Done, exit code:', code));
   } catch(e) {
-    console.warn('[backfill] Failed to start:', e.message);
+    console.warn('[backfill] Could not start:', e.message);
   }
 }
 
