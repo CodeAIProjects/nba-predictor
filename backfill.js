@@ -10,7 +10,6 @@
 //   - Resolves all results immediately since games are finished
 // ─────────────────────────────────────────────────────────────────────────────
 
-require('dotenv').config();        // load .env if present
 const fetch = require('node-fetch');
 const db    = require('./db');
 
