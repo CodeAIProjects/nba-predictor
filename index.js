@@ -205,27 +205,15 @@ async function enrichInjuriesWithPPG(abbr, players) {
   if (!BDL_API_KEY || !players.length) return players;
 
   // Get team season avg (for pct calculation)
-  let teamAvg = teamAvgCache[abbr];
-  if (!teamAvg) {
-    // Estimate from team name — BallDontLie team stats
-    const headers = { 'Authorization': BDL_API_KEY };
-    const teamsUrl = 'https://api.balldontlie.io/v1/teams?per_page=30';
-    const teamsData = await safeFetch(teamsUrl, { headers });
-    if (teamsData?.data) {
-      // Find team by abbreviation
-      const team = teamsData.data.find(t =>
-        t.abbreviation === abbr ||
-        t.abbreviation === abbr.replace('NYK','NY').replace('GSW','GS').replace('SAS','SA').replace('NOP','NO').replace('WAS','WSH')
-      );
-      if (team) {
-        const statsUrl = `https://api.balldontlie.io/v1/season_averages/team?season=2025&team_id=${team.id}`;
-        const statsData = await safeFetch(statsUrl, { headers });
-        teamAvg = statsData?.data?.[0]?.pts || 112;
-        teamAvgCache[abbr] = teamAvg;
-      }
-    }
-    if (!teamAvg) teamAvg = 112; // league average fallback
-  }
+  // 2025-26 season team scoring averages (hardcoded — reliable, no extra API call)
+  const TEAM_AVG_PTS = {
+    ATL:119.2,BOS:120.1,BKN:106.8,CHA:105.2,CHI:108.4,CLE:113.8,DAL:112.6,DEN:113.8,
+    DET:113.4,GSW:114.2,HOU:112.8,IND:118.6,LAC:115.4,LAL:114.8,MEM:115.8,MIA:110.6,
+    MIL:113.6,MIN:112.4,NOP:106.2,NYK:116.4,OKC:118.8,ORL:109.4,PHI:106.8,PHX:114.2,
+    POR:108.6,SAC:116.2,SAS:108.8,TOR:107.4,UTA:104.6,WAS:103.5
+  };
+  let teamAvg = teamAvgCache[abbr] || TEAM_AVG_PTS[abbr] || 112;
+  teamAvgCache[abbr] = teamAvg;
 
   // Fetch PPG for each player in parallel
   const enriched = await Promise.all(players.map(async p => {
@@ -234,14 +222,25 @@ async function enrichInjuriesWithPPG(abbr, players) {
     }
     try {
       const headers = { 'Authorization': BDL_API_KEY };
-      const searchUrl = `https://api.balldontlie.io/v1/players?search=${encodeURIComponent(p.name)}&per_page=3`;
+      // Try full name first, then last name only for better matching
+      const nameParts = p.name.split(' ');
+      const searchName = nameParts.length > 1 ? nameParts.slice(-1)[0] : p.name; // last name
+      const searchUrl = `https://api.balldontlie.io/v1/players?search=${encodeURIComponent(searchName)}&per_page=5`;
       const res = await safeFetch(searchUrl, { headers });
-      if (!res?.data?.length) return p;
+      if (!res?.data?.length) { console.log('[ppg] no player found:', p.name); return p; }
 
-      const pid = res.data[0].id;
+      // Find best match by full name
+      const fullLower = p.name.toLowerCase();
+      const match = res.data.find(pl =>
+        (pl.first_name + ' ' + pl.last_name).toLowerCase().includes(nameParts[0].toLowerCase()) ||
+        fullLower.includes(pl.last_name.toLowerCase())
+      ) || res.data[0];
+
+      const pid = match.id;
       const avgUrl = `https://api.balldontlie.io/v1/season_averages?season=2025&player_ids[]=${pid}`;
       const avgRes = await safeFetch(avgUrl, { headers });
       const pts = parseFloat(avgRes?.data?.[0]?.pts || 0);
+      console.log('[ppg]', p.name, '->', match.first_name, match.last_name, '=', pts, 'pts');
 
       if (pts > 0) {
         const pct = Math.round((pts / teamAvg) * 100);
@@ -537,13 +536,14 @@ app.get('/api/player-stats', async (req, res) => {
   res.json({ name, stats });
 });
 
-// Debug endpoint — see parsed injury data for a team
+// Debug endpoint — see parsed injury data for a team (with PPG enrichment)
 app.get('/api/debug/injuries/:abbr', async (req, res) => {
   const abbr = req.params.abbr.toUpperCase();
   const tid = ESPN_TEAM_IDS[abbr];
   if (!tid) return res.json({ error: 'Unknown team', abbr });
-  const injuries = await fetchTeamInjuries(abbr);
-  res.json({ abbr, tid, count: injuries.length, injuries });
+  const raw = await fetchTeamInjuries(abbr);
+  const enriched = await enrichInjuriesWithPPG(abbr, raw);
+  res.json({ abbr, tid, count: enriched.length, bdlKey: !!BDL_API_KEY, injuries: enriched });
 });
 
 // Debug endpoint — see raw odds data
