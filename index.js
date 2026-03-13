@@ -561,9 +561,16 @@ app.get('/api/debug/ppg', async (req, res) => {
 
   // Step 1: search
   const searchUrl = `https://api.balldontlie.io/v1/players?search=${encodeURIComponent(name)}&per_page=5`;
-  const searchRes = await safeFetch(searchUrl, { headers });
+  // Log raw response including status code
+  let rawStatus = null, rawBody = null;
+  try {
+    const r = await fetch(searchUrl, { headers, timeout: 8000 });
+    rawStatus = r.status;
+    rawBody = await r.json();
+  } catch(e) { rawBody = { fetchError: e.message }; }
+  const searchRes = rawBody;
 
-  if (!searchRes?.data?.length) return res.json({ name, error: 'player not found', searchUrl });
+  if (!searchRes?.data?.length) return res.json({ name, searchUrl, rawStatus, rawBody });
 
   const player = searchRes.data[0];
   const pid = player.id;
