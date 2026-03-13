@@ -112,6 +112,10 @@
   .inj-pct{font-size:.64rem;font-weight:700;font-family:"DM Mono",monospace}
   .inj-pct.out{color:var(--red)}.inj-pct.ques{color:var(--yellow)}
   .inj-note{font-size:.61rem;color:var(--muted);margin-top:1px}
+  .inj-pts{font-size:.7rem;color:var(--cyan);font-family:'DM Mono',monospace;white-space:nowrap}
+  .inj-bar-wrap{width:100%;height:5px;background:rgba(255,255,255,.07);border-radius:3px;margin-top:2px;overflow:hidden}
+  .inj-bar{height:5px;border-radius:3px;transition:width .5s}
+  .inj-bar.out{background:var(--red)}.inj-bar.ques{background:var(--yellow)}.inj-bar.ok{background:var(--green)}
   .no-games,.loading-state,.error-state{text-align:center;padding:70px 20px;font-family:"DM Mono",monospace}
   .state-icon{font-size:3rem;margin-bottom:14px}
   .state-title{font-size:.85rem;letter-spacing:2px;color:var(--text2);margin-bottom:6px}
@@ -413,7 +417,14 @@ function renderRow(g, ev) {
     var missingPct = Math.min(outP.length * 9, 55);
     var col = missingPct>30 ? 'var(--red)' : missingPct>15 ? 'var(--yellow)' : 'var(--green)';
     var rows = pl.map(function(p) {
-      return '<div class="inj-player"><div class="inj-dot '+p.status+'"></div><div class="inj-info"><div class="inj-row1"><span class="inj-name">'+p.name+'</span><span class="inj-pct '+p.status+'">'+(p.status==='out'?'OUT':'Q')+'</span></div><div class="inj-note">'+(p.note||'')+'</div></div></div>';
+      var hasPpg = p.pts && p.pts > 0;
+      var ppgHtml = hasPpg
+        ? '<span class="inj-pts" data-tip="'+p.name+' averages '+p.pts+' PPG — '+(p.pct||'?')+'% of '+team+' scoring">'+p.pts+'ppg</span><span class="inj-pct '+p.status+'" data-tip="'+(p.pct||'?')+'% of '+team+' scoring">'+(p.pct||'?')+'%</span>'
+        : '<span class="inj-pct '+p.status+'">'+(p.status==='out'?'OUT':'Q')+'</span>';
+      var barHtml = hasPpg
+        ? '<div class="inj-bar-wrap"><div class="inj-bar '+p.status+'" style="width:'+Math.min((p.pct||0)*3,100)+'%"></div></div>'
+        : '';
+      return '<div class="inj-player"><div class="inj-dot '+p.status+'"></div><div class="inj-info"><div class="inj-row1"><span class="inj-name">'+p.name+'</span>'+ppgHtml+'</div>'+barHtml+'<div class="inj-note">'+(p.note||'')+'</div></div></div>';
     }).join('');
     return '<div class="inj-section"><div class="inj-team-hdr">'+team+' — <span style="color:'+col+'">~'+missingPct+'% scoring at risk</span></div>'+rows+'</div>';
   }).join('');
