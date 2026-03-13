@@ -131,35 +131,43 @@ async function fetchTeamInjuries(abbr) {
   const tid = ESPN_TEAM_IDS[abbr];
   if (!tid) return [];
 
-  const urls = [
-    `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/injuries`,
-    `https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/teams/${tid}/injuries?limit=50`,
-  ];
+  // Step 1: get the list of $ref links from core API
+  const listUrl = `https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/teams/${tid}/injuries?limit=50`;
+  const data = await safeFetch(listUrl);
+  if (!data?.items?.length) return [];
 
-  for (const url of urls) {
-    const data = await safeFetch(url);
-    if (!data) continue;
-    const list = data.injuries || data.items || (Array.isArray(data) ? data : null);
-    if (list && list.length > 0) {
-      console.log(`[injuries] ${abbr} => ${list.length} players from ${url.slice(50,90)}`);
-      return list.map(parseInjury);
+  // Step 2: follow each $ref link in parallel to get actual injury details
+  const refs = data.items
+    .filter(item => item.$ref)
+    .map(item => item.$ref);
+
+  const details = await Promise.all(refs.map(ref => safeFetch(ref)));
+
+  const results = [];
+  for (const inj of details) {
+    if (!inj) continue;
+    try {
+      // Fetch athlete details if we only have a $ref
+      let athleteName = inj.athlete?.displayName || inj.athlete?.shortName || null;
+      if (!athleteName && inj.athlete?.$ref) {
+        const athlete = await safeFetch(inj.athlete.$ref);
+        athleteName = athlete?.displayName || athlete?.shortName || 'Unknown';
+      }
+
+      const raw = (inj.status || inj.type?.description || inj.fantasy?.status?.description || '').toLowerCase();
+      const status = (raw.includes('out') || raw.includes('doubt') || raw.includes('ir')) ? 'out'
+                   : (raw.includes('quest') || raw.includes('day-to-day') || raw.includes('dtd') || raw.includes('prob')) ? 'ques'
+                   : 'ques';
+      const note = inj.longComment || inj.shortComment || inj.injury?.description || inj.type?.description || raw || '';
+
+      results.push({ name: athleteName || 'Unknown', status, note, espnId: inj.athlete?.id || '' });
+    } catch(e) {
+      console.warn('[injury parse error]', e.message);
     }
   }
-  console.log(`[injuries] ${abbr} => none found`);
-  return [];
-}
 
-function parseInjury(inj) {
-  const raw = (inj.status || inj.type?.description || '').toLowerCase();
-  const status = (raw.includes('out') || raw.includes('doubt')) ? 'out'
-               : (raw.includes('quest') || raw.includes('day-to-day') || raw.includes('prob')) ? 'ques'
-               : 'ques';
-  return {
-    name:   inj.athlete?.displayName || inj.athlete?.shortName || 'Unknown',
-    status,
-    note:   inj.injury?.longComment || inj.injury?.description || inj.longComment || inj.detail || raw || '',
-    espnId: inj.athlete?.id || '',
-  };
+  console.log(`[injuries] ${abbr} => ${results.length} players`);
+  return results;
 }
 
 // ─── 3. BALLDONTLIE PLAYER STATS ─────────────────────────────────────────────
@@ -383,15 +391,13 @@ app.get('/api/player-stats', async (req, res) => {
   res.json({ name, stats });
 });
 
-// Debug endpoint — see raw injury data for a team
+// Debug endpoint — see parsed injury data for a team
 app.get('/api/debug/injuries/:abbr', async (req, res) => {
   const abbr = req.params.abbr.toUpperCase();
   const tid = ESPN_TEAM_IDS[abbr];
   if (!tid) return res.json({ error: 'Unknown team', abbr });
-  const url1 = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/injuries`;
-  const url2 = `https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/teams/${tid}/injuries?limit=50`;
-  const [d1, d2] = await Promise.all([safeFetch(url1), safeFetch(url2)]);
-  res.json({ abbr, tid, url1: { keys: d1 ? Object.keys(d1) : null, sample: d1 }, url2: { keys: d2 ? Object.keys(d2) : null, sample: d2 } });
+  const injuries = await fetchTeamInjuries(abbr);
+  res.json({ abbr, tid, count: injuries.length, injuries });
 });
 
 // Debug endpoint — see raw odds data
