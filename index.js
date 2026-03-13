@@ -553,6 +553,33 @@ app.get('/api/debug/odds', async (req, res) => {
   res.json({ count: odds.length, sample: odds.slice(0,3) });
 });
 
+// Debug endpoint — test BDL PPG lookup for a player name
+app.get('/api/debug/ppg', async (req, res) => {
+  const name = req.query.name || 'LeBron James';
+  if (!BDL_API_KEY) return res.json({ error: 'BDL_API_KEY not set' });
+  const headers = { 'Authorization': BDL_API_KEY };
+
+  // Step 1: search
+  const searchUrl = `https://api.balldontlie.io/v1/players?search=${encodeURIComponent(name)}&per_page=5`;
+  const searchRes = await safeFetch(searchUrl, { headers });
+
+  if (!searchRes?.data?.length) return res.json({ name, error: 'player not found', searchUrl });
+
+  const player = searchRes.data[0];
+  const pid = player.id;
+
+  // Step 2: season averages — try both 2025 and 2024
+  const avg2025 = await safeFetch(`https://api.balldontlie.io/v1/season_averages?season=2025&player_ids[]=${pid}`, { headers });
+  const avg2024 = await safeFetch(`https://api.balldontlie.io/v1/season_averages?season=2024&player_ids[]=${pid}`, { headers });
+
+  res.json({
+    name, searchUrl,
+    player: { id: pid, name: player.first_name + ' ' + player.last_name },
+    season2025: avg2025?.data?.[0] || null,
+    season2024: avg2024?.data?.[0] || null,
+  });
+});
+
 // GET /api/stats?days=30 — model performance
 app.get('/api/stats', async (req, res) => {
   try {
