@@ -2,13 +2,33 @@ const express = require('express');
 const cors    = require('cors');
 const fetch   = require('node-fetch');
 const path    = require('path');
+const fs      = require('fs');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+
+// ─── FIND PUBLIC FOLDER (handles double-nested unzip edge cases) ──────────────
+function findPublicDir() {
+  const candidates = [
+    path.join(__dirname, 'public'),
+    path.join(__dirname, 'nba-predictor', 'public'),
+    path.join(__dirname, '..', 'public'),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(path.join(p, 'index.html'))) {
+      console.log('✅ Found public dir at:', p);
+      return p;
+    }
+  }
+  console.error('❌ Could not find public/index.html! Searched:', candidates);
+  return path.join(__dirname, 'public'); // fallback
+}
+
+const PUBLIC_DIR = findPublicDir();
+app.use(express.static(PUBLIC_DIR));
 
 // ─── ENV KEYS (set in Railway dashboard) ─────────────────────────────────────
 const ODDS_API_KEY = process.env.ODDS_API_KEY || '';   // https://the-odds-api.com
@@ -343,7 +363,17 @@ app.get('/api/health', (req, res) => {
 
 // Serve frontend for all other routes
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  const indexPath = path.join(PUBLIC_DIR, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(404).send(`
+      <h2>⚠️ index.html not found</h2>
+      <p>Looked in: ${PUBLIC_DIR}</p>
+      <p>__dirname: ${__dirname}</p>
+      <p>Files here: ${fs.readdirSync(__dirname).join(', ')}</p>
+    `);
+  }
 });
 
 app.listen(PORT, () => {
