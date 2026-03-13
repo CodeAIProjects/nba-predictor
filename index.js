@@ -197,63 +197,89 @@ async function fetchPlayerAvgPts(playerName, season = '2025-26') {
   return { pts: parseFloat(avg.pts || 0), min: avg.min || '0' };
 }
 
-// ─── 3b. TEAM + PLAYER PPG (BallDontLie) ─────────────────────────────────────
-const ppgCache = {};  // { "PLAYER_NAME": { pts, teamPct } }
-const teamAvgCache = {}; // { "ATL": 114.2 }
+// ─── 3b. PLAYER PPG (ESPN Stats API — free, no key needed) ──────────────────
+const ppgCache = {};     // { "Player Name": { pts, pct } }
+const rosterCache = {};  // { "ATL": { playerName: pts } }
+
+// 2025-26 team scoring averages (used for % calculation)
+const TEAM_AVG_PTS = {
+  ATL:119.2,BOS:120.1,BKN:106.8,CHA:105.2,CHI:108.4,CLE:113.8,DAL:112.6,DEN:113.8,
+  DET:113.4,GSW:114.2,HOU:112.8,IND:118.6,LAC:115.4,LAL:114.8,MEM:115.8,MIA:110.6,
+  MIL:113.6,MIN:112.4,NOP:106.2,NYK:116.4,OKC:118.8,ORL:109.4,PHI:106.8,PHX:114.2,
+  POR:108.6,SAC:116.2,SAS:108.8,TOR:107.4,UTA:104.6,WAS:103.5
+};
+
+async function fetchTeamRosterPPG(abbr) {
+  if (rosterCache[abbr]) return rosterCache[abbr];
+  const tid = ESPN_TEAM_IDS[abbr];
+  if (!tid) return {};
+
+  // ESPN team stats — returns all players with season averages
+  const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/statistics`;
+  const data = await safeFetch(url);
+
+  const map = {};
+  // Try athletes array from roster+stats endpoint
+  const athletes = data?.athletes || data?.roster?.athletes || [];
+  for (const a of athletes) {
+    const name = a.athlete?.displayName || a.displayName;
+    if (!name) continue;
+    // Find pts in stats categories
+    const cats = a.statistics?.splits?.categories || a.categories || [];
+    for (const cat of cats) {
+      if (!cat.stats) continue;
+      const ptsIdx = (cat.labels || cat.names || []).findIndex(l =>
+        l === 'PTS' || l === 'avgPoints' || l === 'points'
+      );
+      if (ptsIdx >= 0 && cat.stats[ptsIdx]) {
+        map[name] = parseFloat(cat.stats[ptsIdx]);
+        break;
+      }
+    }
+  }
+
+  // Fallback: try ESPN roster endpoint which has per-game stats
+  if (!Object.keys(map).length) {
+    const rUrl = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/roster`;
+    const rData = await safeFetch(rUrl);
+    const rAthletes = rData?.athletes || [];
+    for (const group of rAthletes) {
+      const items = group.items || (Array.isArray(group) ? group : [group]);
+      for (const a of items) {
+        const name = a.displayName || a.fullName;
+        const pts = parseFloat(a.statistics?.splits?.categories?.[0]?.stats?.[0] || 0);
+        if (name && pts > 0) map[name] = pts;
+      }
+    }
+  }
+
+  console.log('[roster ppg] ' + abbr + ' => ' + Object.keys(map).length + ' players');
+  rosterCache[abbr] = map;
+  return map;
+}
 
 async function enrichInjuriesWithPPG(abbr, players) {
-  if (!BDL_API_KEY || !players.length) return players;
+  if (!players.length) return players;
+  const teamAvg = TEAM_AVG_PTS[abbr] || 112;
+  const roster  = await fetchTeamRosterPPG(abbr);
 
-  // Get team season avg (for pct calculation)
-  // 2025-26 season team scoring averages (hardcoded — reliable, no extra API call)
-  const TEAM_AVG_PTS = {
-    ATL:119.2,BOS:120.1,BKN:106.8,CHA:105.2,CHI:108.4,CLE:113.8,DAL:112.6,DEN:113.8,
-    DET:113.4,GSW:114.2,HOU:112.8,IND:118.6,LAC:115.4,LAL:114.8,MEM:115.8,MIA:110.6,
-    MIL:113.6,MIN:112.4,NOP:106.2,NYK:116.4,OKC:118.8,ORL:109.4,PHI:106.8,PHX:114.2,
-    POR:108.6,SAC:116.2,SAS:108.8,TOR:107.4,UTA:104.6,WAS:103.5
-  };
-  let teamAvg = teamAvgCache[abbr] || TEAM_AVG_PTS[abbr] || 112;
-  teamAvgCache[abbr] = teamAvg;
-
-  // Fetch PPG for each player in parallel
-  const enriched = await Promise.all(players.map(async p => {
-    if (ppgCache[p.name]) {
-      return { ...p, ...ppgCache[p.name] };
+  return players.map(p => {
+    // Try exact match first, then partial
+    let pts = roster[p.name];
+    if (!pts) {
+      const nameLower = p.name.toLowerCase();
+      const key = Object.keys(roster).find(k =>
+        k.toLowerCase().includes(nameLower.split(' ').pop()) ||
+        nameLower.includes(k.toLowerCase().split(' ').pop())
+      );
+      if (key) pts = roster[key];
     }
-    try {
-      const headers = { 'Authorization': BDL_API_KEY };
-      // Try full name first, then last name only for better matching
-      const nameParts = p.name.split(' ');
-      const searchName = nameParts.length > 1 ? nameParts.slice(-1)[0] : p.name; // last name
-      const searchUrl = `https://api.balldontlie.io/v1/players?search=${encodeURIComponent(searchName)}&per_page=5`;
-      const res = await safeFetch(searchUrl, { headers });
-      if (!res?.data?.length) { console.log('[ppg] no player found:', p.name); return p; }
-
-      // Find best match by full name
-      const fullLower = p.name.toLowerCase();
-      const match = res.data.find(pl =>
-        (pl.first_name + ' ' + pl.last_name).toLowerCase().includes(nameParts[0].toLowerCase()) ||
-        fullLower.includes(pl.last_name.toLowerCase())
-      ) || res.data[0];
-
-      const pid = match.id;
-      const avgUrl = `https://api.balldontlie.io/v1/season_averages?season=2025&player_ids[]=${pid}`;
-      const avgRes = await safeFetch(avgUrl, { headers });
-      const pts = parseFloat(avgRes?.data?.[0]?.pts || 0);
-      console.log('[ppg]', p.name, '->', match.first_name, match.last_name, '=', pts, 'pts');
-
-      if (pts > 0) {
-        const pct = Math.round((pts / teamAvg) * 100);
-        ppgCache[p.name] = { pts: parseFloat(pts.toFixed(1)), pct };
-        return { ...p, pts: parseFloat(pts.toFixed(1)), pct };
-      }
-    } catch(e) {
-      console.warn('[ppg error]', p.name, e.message);
+    if (pts && pts > 0) {
+      const pct = Math.round((pts / teamAvg) * 100);
+      return { ...p, pts: parseFloat(pts.toFixed(1)), pct };
     }
     return p;
-  }));
-
-  return enriched;
+  });
 }
 
 // ─── 4. THE ODDS API ─────────────────────────────────────────────────────────
@@ -555,36 +581,11 @@ app.get('/api/debug/odds', async (req, res) => {
 
 // Debug endpoint — test BDL PPG lookup for a player name
 app.get('/api/debug/ppg', async (req, res) => {
-  const name = req.query.name || 'LeBron James';
-  if (!BDL_API_KEY) return res.json({ error: 'BDL_API_KEY not set' });
-  const headers = { 'Authorization': BDL_API_KEY };
-
-  // Step 1: search
-  const searchUrl = `https://api.balldontlie.io/v1/players?search=${encodeURIComponent(name)}&per_page=5`;
-  // Log raw response including status code
-  let rawStatus = null, rawBody = null;
-  try {
-    const r = await fetch(searchUrl, { headers, timeout: 8000 });
-    rawStatus = r.status;
-    rawBody = await r.json();
-  } catch(e) { rawBody = { fetchError: e.message }; }
-  const searchRes = rawBody;
-
-  if (!searchRes?.data?.length) return res.json({ name, searchUrl, rawStatus, rawBody });
-
-  const player = searchRes.data[0];
-  const pid = player.id;
-
-  // Step 2: season averages — try both 2025 and 2024
-  const avg2025 = await safeFetch(`https://api.balldontlie.io/v1/season_averages?season=2025&player_ids[]=${pid}`, { headers });
-  const avg2024 = await safeFetch(`https://api.balldontlie.io/v1/season_averages?season=2024&player_ids[]=${pid}`, { headers });
-
-  res.json({
-    name, searchUrl,
-    player: { id: pid, name: player.first_name + ' ' + player.last_name },
-    season2025: avg2025?.data?.[0] || null,
-    season2024: avg2024?.data?.[0] || null,
-  });
+  const abbr = (req.query.team || 'LAL').toUpperCase();
+  const roster = await fetchTeamRosterPPG(abbr);
+  const injuries = await fetchTeamInjuries(abbr);
+  const enriched = await enrichInjuriesWithPPG(abbr, injuries);
+  res.json({ abbr, rosterPlayers: Object.keys(roster).length, roster, enrichedInjuries: enriched });
 });
 
 // GET /api/stats?days=30 — model performance
