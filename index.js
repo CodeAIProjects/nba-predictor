@@ -576,12 +576,31 @@ app.get('/api/debug/odds', async (req, res) => {
 // Debug endpoint — test BDL PPG lookup for a player name
 app.get('/api/debug/ppg', async (req, res) => {
   const abbr = (req.query.team || 'LAL').toUpperCase();
-  // Clear cache so we get fresh data
-  delete rosterCache[abbr];
-  const roster   = await fetchTeamRosterPPG(abbr);
-  const injuries = await fetchTeamInjuries(abbr);
-  const enriched = await enrichInjuriesWithPPG(abbr, injuries);
-  res.json({ abbr, rosterCount: Object.keys(roster).length, roster, enrichedInjuries: enriched });
+  const tid = ESPN_TEAM_IDS[abbr];
+
+  // Step 1: get roster
+  const rUrl = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/roster`;
+  const rData = await safeFetch(rUrl);
+  const allAthletes = (rData?.athletes || []).flatMap(g => g.items || (g.id ? [g] : []));
+  const firstPlayer = allAthletes[0];
+
+  if (!firstPlayer) return res.json({ error: 'no athletes found', rosterKeys: rData ? Object.keys(rData) : null });
+
+  // Step 2: test stats endpoint for first player
+  const aid = firstPlayer.id;
+  const name = firstPlayer.displayName;
+  const sUrl = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/athletes/${aid}/stats`;
+  const sd = await safeFetch(sUrl);
+
+  res.json({
+    abbr, tid,
+    athleteCount: allAthletes.length,
+    firstPlayer: { id: aid, name },
+    statsUrl: sUrl,
+    statsKeys: sd ? Object.keys(sd) : null,
+    splitCategories: sd?.splits?.categories?.map(c => ({ name: c.name, names: c.names?.slice(0,5), stats: c.stats?.slice(0,5) })) || null,
+    rawSample: sd,
+  });
 });
 
 // GET /api/stats?days=30 — model performance
