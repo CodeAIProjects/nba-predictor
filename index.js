@@ -158,7 +158,11 @@ async function fetchTeamInjuries(abbr) {
       const status = (raw.includes('out') || raw.includes('doubt') || raw.includes('ir')) ? 'out'
                    : (raw.includes('quest') || raw.includes('day-to-day') || raw.includes('dtd') || raw.includes('prob')) ? 'ques'
                    : 'ques';
-      const note = inj.longComment || inj.shortComment || inj.injury?.description || inj.type?.description || raw || '';
+      // Use shortComment if available, otherwise truncate longComment to 120 chars
+      const longNote = inj.longComment || inj.shortComment || inj.injury?.description || inj.type?.description || raw || '';
+      const note = inj.shortComment
+        ? inj.shortComment
+        : longNote.length > 120 ? longNote.slice(0, 117) + '...' : longNote;
 
       results.push({ name: athleteName || 'Unknown', status, note, espnId: inj.athlete?.id || '' });
     } catch(e) {
