@@ -542,6 +542,24 @@ app.get('*', (req, res) => {
   }
 });
 
+// ── BACKGROUND BACKFILL ──────────────────────────────────────────────────────
+// Runs once at startup to load recent history. Non-blocking — server starts immediately.
+async function runBackfillInBackground(days) {
+  try {
+    console.log(`[backfill] Starting background backfill for last ${days} days...`);
+    const { execFile } = require('child_process');
+    const child = execFile('node', ['backfill.js', `--days=${days}`], {
+      cwd: __dirname,
+      env: process.env,
+    });
+    child.stdout.on('data', d => process.stdout.write('[backfill] ' + d));
+    child.stderr.on('data', d => process.stderr.write('[backfill] ' + d));
+    child.on('close', code => console.log(`[backfill] Finished with code ${code}`));
+  } catch(e) {
+    console.warn('[backfill] Failed to start:', e.message);
+  }
+}
+
 // Init DB then start server
 db.initDB().then(() => {
   app.listen(PORT, () => {
@@ -550,6 +568,10 @@ db.initDB().then(() => {
     console.log(`   BDL API:  ${BDL_API_KEY  ? '✅ configured' : '❌ not set (add BDL_API_KEY env var)'}`);
     console.log(`   Database: ${process.env.DATABASE_URL ? '✅ PostgreSQL' : '📁 file fallback'}`);
   });
+
+  // Run backfill in background — doesn't block server startup
+  setTimeout(() => runBackfillInBackground(150), 5000);
+
 }).catch(e => {
   console.error('Fatal: DB init failed', e.message);
   process.exit(1);
