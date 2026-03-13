@@ -582,10 +582,21 @@ app.get('/api/debug/odds', async (req, res) => {
 // Debug endpoint — test BDL PPG lookup for a player name
 app.get('/api/debug/ppg', async (req, res) => {
   const abbr = (req.query.team || 'LAL').toUpperCase();
-  const roster = await fetchTeamRosterPPG(abbr);
-  const injuries = await fetchTeamInjuries(abbr);
-  const enriched = await enrichInjuriesWithPPG(abbr, injuries);
-  res.json({ abbr, rosterPlayers: Object.keys(roster).length, roster, enrichedInjuries: enriched });
+  const tid = ESPN_TEAM_IDS[abbr];
+
+  // Fetch raw ESPN stats and show exactly what comes back
+  const url1 = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/statistics`;
+  const url2 = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/roster`;
+  const url3 = `https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/seasons/2026/teams/${tid}/statistics`;
+
+  const [d1, d2, d3] = await Promise.all([safeFetch(url1), safeFetch(url2), safeFetch(url3)]);
+
+  res.json({
+    abbr, tid,
+    statistics: { keys: d1 ? Object.keys(d1) : null, athleteCount: d1?.athletes?.length || 0, sample: d1?.athletes?.slice(0,1) || d1 },
+    roster:     { keys: d2 ? Object.keys(d2) : null, athleteCount: d2?.athletes?.length || 0, sample: d2?.athletes?.slice(0,1) },
+    coreStats:  { keys: d3 ? Object.keys(d3) : null, sample: d3 },
+  });
 });
 
 // GET /api/stats?days=30 — model performance
