@@ -3,6 +3,7 @@ const cors    = require('cors');
 const fetch   = require('node-fetch');
 const path    = require('path');
 const fs      = require('fs');
+const db      = require('./db');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -315,11 +316,63 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// ── PREDICTION MODEL ──────────────────────────────────────────────────────────
+// Simple model: used for saving picks to DB. Mirrors evaluateGame() in frontend.
+function modelPick(game) {
+  const odds = game.odds;
+  if (!odds || !odds.spread) return null;
+
+  const homeInj = (game.injuries?.[game.home] || []).filter(p => p.status === 'out').length;
+  const awayInj = (game.injuries?.[game.away] || []).filter(p => p.status === 'out').length;
+  const totalOut = homeInj + awayInj;
+  const injImpact = totalOut * 3;
+
+  const spreadSide = odds.spreadFav;
+  const spreadLine = odds.spread;
+  const ouSide     = injImpact > 8 ? 'UNDER' : 'OVER';
+  const ouLine     = odds.total;
+
+  // Confidence: fewer injuries + tighter spread = higher confidence
+  const conf = totalOut >= 4 ? 2 : totalOut >= 2 ? 3 : spreadLine <= 6 ? 4 : 3;
+
+  return {
+    spread: { side: spreadSide + ' -' + spreadLine, line: spreadLine, conf },
+    total:  { side: ouSide + ' ' + ouLine,          line: ouLine,     conf },
+  };
+}
+
+// ── RESOLVE PICK RESULT ───────────────────────────────────────────────────────
+function resolveResult(game, pickType) {
+  if (game.status !== 'closed') return 'pending';
+  const hs = game.homeScore, as = game.awayScore;
+  const tot = hs + as;
+  const odds = game.odds;
+  if (!odds) return 'pending';
+
+  if (pickType === 'spread') {
+    if (!odds.spread || !odds.spreadFav) return 'pending';
+    const favScore = odds.spreadFav === game.home ? hs : as;
+    const dogScore = odds.spreadFav === game.home ? as : hs;
+    const margin   = favScore - dogScore;
+    if (margin > odds.spread)  return 'win';
+    if (margin === odds.spread) return 'push';
+    return 'loss';
+  }
+
+  if (pickType === 'total') {
+    if (!odds.total) return 'pending';
+    const pick = game._ouPick || (tot > odds.total ? 'OVER' : 'UNDER'); // fallback
+    if (tot === odds.total) return 'push';
+    if (pick === 'OVER')  return tot > odds.total ? 'win' : 'loss';
+    if (pick === 'UNDER') return tot < odds.total ? 'win' : 'loss';
+  }
+  return 'pending';
+}
+
 async function pollToday() {
   const dateStr = today();
   try {
     const existing = cache[dateStr];
-    // Use short TTL if any game is live, longer if all closed
     const isLive = existing?.games?.some(g => g.status === 'inprogress');
     const ttl    = isLive ? CACHE_TTL_MS : 60 * 1000;
     if (existing && Date.now() - existing.fetchedAt < ttl) return;
@@ -327,6 +380,32 @@ async function pollToday() {
     const data = await assembleGameData(dateStr);
     cache[dateStr] = data;
     console.log(`[poll] ${dateStr} → ${data.games.length} games, live=${isLive}`);
+
+    // ── SAVE TO DATABASE ──────────────────────────────────────────────────────
+    for (const game of data.games) {
+      try {
+        await db.upsertGame(game);
+
+        const picks = modelPick(game);
+        if (!picks) continue;
+
+        // Tag game with ouPick for result resolution
+        game._ouPick = picks.total.side.startsWith('OVER') ? 'OVER' : 'UNDER';
+
+        // Save/update spread pick
+        const spreadResult = resolveResult(game, 'spread');
+        await db.upsertPick(game.espnId, 'spread',
+          picks.spread.side, picks.spread.line, picks.spread.conf, spreadResult);
+
+        // Save/update total pick
+        const totalResult = resolveResult(game, 'total');
+        await db.upsertPick(game.espnId, 'total',
+          picks.total.side, picks.total.line, picks.total.conf, totalResult);
+
+      } catch(e) {
+        console.error('[db upsert error]', game.espnId, e.message);
+      }
+    }
   } catch(e) {
     console.error('[poll error]', e.message);
   }
@@ -411,6 +490,28 @@ app.get('/api/debug/odds', async (req, res) => {
   res.json({ count: odds.length, sample: odds.slice(0,3) });
 });
 
+// GET /api/stats?days=30 — model performance
+app.get('/api/stats', async (req, res) => {
+  try {
+    const days = parseInt(req.query.days) || 30;
+    const stats = await db.getStats(days);
+    res.json(stats);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/history?date=YYYY-MM-DD — saved games + picks for a date
+app.get('/api/history', async (req, res) => {
+  const dateStr = req.query.date || today();
+  try {
+    const rows = await db.getHistoryForDate(dateStr);
+    res.json({ date: dateStr, games: rows });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({
@@ -421,6 +522,7 @@ app.get('/api/health', (req, res) => {
     keys: {
       oddsApi: !!ODDS_API_KEY,
       bdlApi:  !!BDL_API_KEY,
+      database: !!(process.env.DATABASE_URL),
     }
   });
 });
@@ -440,8 +542,15 @@ app.get('*', (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🏀 NBA Predictor API running on port ${PORT}`);
-  console.log(`   Odds API: ${ODDS_API_KEY ? '✅ configured' : '❌ not set (add ODDS_API_KEY env var)'}`);
-  console.log(`   BDL API:  ${BDL_API_KEY  ? '✅ configured' : '❌ not set (add BDL_API_KEY env var)'}`);
+// Init DB then start server
+db.initDB().then(() => {
+  app.listen(PORT, () => {
+    console.log(`🏀 NBA Predictor API running on port ${PORT}`);
+    console.log(`   Odds API: ${ODDS_API_KEY ? '✅ configured' : '❌ not set (add ODDS_API_KEY env var)'}`);
+    console.log(`   BDL API:  ${BDL_API_KEY  ? '✅ configured' : '❌ not set (add BDL_API_KEY env var)'}`);
+    console.log(`   Database: ${process.env.DATABASE_URL ? '✅ PostgreSQL' : '📁 file fallback'}`);
+  });
+}).catch(e => {
+  console.error('Fatal: DB init failed', e.message);
+  process.exit(1);
 });

@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NBA Predictor — Model Performance</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet"/>
+<style>
+  :root{--bg:#080c14;--surface:#0d1320;--card:#111827;--border:#1e2d45;--gold:#f5c518;--cyan:#38bdf8;--green:#22c55e;--green-bg:rgba(34,197,94,.13);--red:#ef4444;--red-bg:rgba(239,68,68,.13);--yellow:#facc15;--yellow-bg:rgba(250,204,21,.10);--orange:#fb923c;--purple:#c084fc;--muted:#64748b;--text:#e2e8f0;--text2:#94a3b8}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:"DM Sans",sans-serif;min-height:100vh}
+  header{background:linear-gradient(135deg,#0a1628,#0d1f3c 50%,#091222);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between}
+  .logo{display:flex;align-items:center;gap:12px}
+  .logo-icon{font-size:1.9rem}
+  .logo h1{font-family:"Bebas Neue",sans-serif;font-size:1.5rem;letter-spacing:3px;color:var(--gold);line-height:1}
+  .logo p{font-size:.64rem;color:var(--text2);letter-spacing:2px;text-transform:uppercase;margin-top:2px}
+  .nav{display:flex;gap:10px}
+  .nav a{font-family:"DM Mono",monospace;font-size:.68rem;letter-spacing:1px;padding:6px 14px;border-radius:20px;border:1px solid var(--border);color:var(--text2);text-decoration:none;transition:all .2s}
+  .nav a:hover{border-color:var(--cyan);color:var(--cyan)}
+  .nav a.active{border-color:var(--gold);color:var(--gold)}
+
+  /* DAYS FILTER */
+  .filter-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;align-items:center;gap:10px}
+  .filter-label{font-family:"DM Mono",monospace;font-size:.6rem;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase}
+  .day-btn{font-family:"DM Mono",monospace;font-size:.64rem;padding:4px 12px;border-radius:16px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;transition:all .2s}
+  .day-btn:hover{border-color:var(--cyan);color:var(--cyan)}
+  .day-btn.active{border-color:var(--gold);color:var(--gold);background:rgba(245,197,24,.08)}
+
+  /* KPI CARDS */
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;padding:20px 24px}
+  .kpi{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+  .kpi-label{font-family:"DM Mono",monospace;font-size:.58rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  .kpi-val{font-family:"Bebas Neue",sans-serif;font-size:2.2rem;letter-spacing:1px;line-height:1}
+  .kpi-sub{font-size:.65rem;color:var(--muted);margin-top:4px}
+  .kpi.green{border-color:rgba(34,197,94,.3);background:var(--green-bg)}
+  .kpi.green .kpi-val{color:var(--green)}
+  .kpi.red{border-color:rgba(239,68,68,.3);background:var(--red-bg)}
+  .kpi.red .kpi-val{color:var(--red)}
+  .kpi.gold .kpi-val{color:var(--gold)}
+  .kpi.cyan .kpi-val{color:var(--cyan)}
+  .kpi.purple .kpi-val{color:var(--purple)}
+
+  /* SECTIONS */
+  .section{padding:0 24px 24px}
+  .section-title{font-family:"Bebas Neue",sans-serif;font-size:1.1rem;letter-spacing:2px;color:var(--gold);margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:6px}
+
+  /* SPLIT GRID */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+  @media(max-width:700px){.split{grid-template-columns:1fr}}
+
+  /* STAT TABLE */
+  .stat-card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .stat-card-title{font-family:"DM Mono",monospace;font-size:.6rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);padding:10px 14px;border-bottom:1px solid var(--border)}
+  table.stat-tbl{width:100%;border-collapse:collapse}
+  table.stat-tbl th{font-family:"DM Mono",monospace;font-size:.56rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);padding:7px 12px;text-align:left;border-bottom:1px solid var(--border)}
+  table.stat-tbl td{font-size:.76rem;padding:7px 12px;border-bottom:1px solid rgba(30,45,69,.4);vertical-align:middle}
+  table.stat-tbl tr:last-child td{border-bottom:0}
+  table.stat-tbl tr:hover td{background:rgba(56,189,248,.03)}
+  .win-pct{font-family:"DM Mono",monospace;font-weight:600}
+  .win-pct.good{color:var(--green)}
+  .win-pct.ok{color:var(--yellow)}
+  .win-pct.bad{color:var(--red)}
+
+  /* WIN RATE BAR */
+  .rate-bar-wrap{width:100%;height:6px;background:rgba(255,255,255,.07);border-radius:4px;margin-top:4px;overflow:hidden}
+  .rate-bar{height:6px;border-radius:4px;transition:width .6s ease}
+  .rate-bar.good{background:var(--green)}
+  .rate-bar.ok{background:var(--yellow)}
+  .rate-bar.bad{background:var(--red)}
+
+  /* RESULT BADGE */
+  .res{display:inline-block;padding:2px 7px;border-radius:4px;font-family:"DM Mono",monospace;font-size:.6rem;font-weight:700}
+  .res.win{background:var(--green-bg);color:var(--green);border:1px solid var(--green)}
+  .res.loss{background:var(--red-bg);color:var(--red);border:1px solid var(--red)}
+  .res.push{background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow)}
+  .res.pending{background:rgba(100,116,139,.1);color:var(--muted);border:1px solid var(--border)}
+
+  /* RECENT TABLE */
+  .recent-wrap{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .recent-wrap table{width:100%;border-collapse:collapse}
+  .recent-wrap th{font-family:"DM Mono",monospace;font-size:.56rem;letter-spacing:1px;text-transform:uppercase;color:var(--muted);padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);background:#0f1e35}
+  .recent-wrap td{font-size:.74rem;padding:7px 10px;border-bottom:1px solid rgba(30,45,69,.4);vertical-align:middle}
+  .recent-wrap tr:last-child td{border-bottom:0}
+  .recent-wrap tr:hover td{background:rgba(56,189,248,.025)}
+  .team-tag{font-family:"DM Mono",monospace;font-size:.66rem;font-weight:500}
+  .score-txt{font-family:"Bebas Neue",sans-serif;font-size:.95rem;color:var(--text2)}
+  .pick-txt{font-size:.7rem;color:var(--cyan)}
+
+  /* STREAK */
+  .streak-boxes{display:flex;gap:3px;flex-wrap:wrap;margin-top:8px}
+  .sbox{width:18px;height:18px;border-radius:3px;font-size:.55rem;display:flex;align-items:center;justify-content:center;font-weight:700}
+  .sbox.win{background:var(--green-bg);color:var(--green);border:1px solid var(--green)}
+  .sbox.loss{background:var(--red-bg);color:var(--red);border:1px solid var(--red)}
+  .sbox.push{background:var(--yellow-bg);color:var(--yellow)}
+  .sbox.pending{background:rgba(100,116,139,.1);color:var(--muted)}
+
+  /* STATES */
+  .loading,.empty{text-align:center;padding:60px 20px;color:var(--muted);font-family:"DM Mono",monospace;font-size:.72rem;letter-spacing:1px}
+  .loading-ball{font-size:2.5rem;display:inline-block;animation:spin .9s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  ::-webkit-scrollbar{width:5px;height:5px}
+  ::-webkit-scrollbar-track{background:var(--bg)}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">📊</div>
+    <div><h1>MODEL PERFORMANCE</h1><p>NBA Predictor · Pick History & Stats</p></div>
+  </div>
+  <nav class="nav">
+    <a href="/">🏀 Live Dashboard</a>
+    <a href="/stats.html" class="active">📊 Performance</a>
+  </nav>
+</header>
+
+<div class="filter-bar">
+  <span class="filter-label">📅 Period</span>
+  <button class="day-btn" onclick="load(7)">7 days</button>
+  <button class="day-btn active" onclick="load(30)">30 days</button>
+  <button class="day-btn" onclick="load(60)">60 days</button>
+  <button class="day-btn" onclick="load(90)">Season</button>
+</div>
+
+<div id="kpi-grid" class="kpi-grid">
+  <div class="loading"><div class="loading-ball">📊</div><div style="margin-top:12px">LOADING STATS...</div></div>
+</div>
+
+<div class="section">
+  <div class="split">
+    <div class="stat-card">
+      <div class="stat-card-title">📊 By Pick Type</div>
+      <table class="stat-tbl">
+        <thead><tr><th>Type</th><th>W</th><th>L</th><th>Push</th><th>Win %</th><th>Record</th></tr></thead>
+        <tbody id="tbl-type"><tr><td colspan="6" class="loading" style="padding:20px;text-align:center">—</td></tr></tbody>
+      </table>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card-title">⭐ By Confidence</div>
+      <table class="stat-tbl">
+        <thead><tr><th>Stars</th><th>W</th><th>L</th><th>Win %</th><th>Rate</th></tr></thead>
+        <tbody id="tbl-conf"><tr><td colspan="5" class="loading" style="padding:20px;text-align:center">—</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section-title">🕐 Recent Pick Streak</div>
+  <div id="streak-boxes" class="streak-boxes" style="margin-bottom:20px"></div>
+
+  <div class="section-title">📋 All Picks</div>
+  <div class="recent-wrap">
+    <table>
+      <thead><tr>
+        <th>Date</th><th>Matchup</th><th>Score</th><th>Pick</th><th>Type</th><th>Line</th><th>Conf</th><th>Result</th>
+      </tr></thead>
+      <tbody id="tbl-recent">
+        <tr><td colspan="8" class="loading" style="padding:30px;text-align:center">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+var API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:3000' : '';
+var activeDays = 30;
+
+function load(days) {
+  activeDays = days;
+  document.querySelectorAll('.day-btn').forEach(function(b) {
+    b.classList.toggle('active', b.textContent.includes(days === 90 ? 'Season' : days + ' days'));
+  });
+  document.getElementById('kpi-grid').innerHTML = '<div class="loading"><div class="loading-ball">📊</div><div style="margin-top:12px">LOADING...</div></div>';
+  fetch(API + '/api/stats?days=' + days).then(function(r){ return r.json(); }).then(renderStats).catch(function(e){
+    document.getElementById('kpi-grid').innerHTML = '<div class="empty">⚠️ Failed to load: ' + e.message + '</div>';
+  });
+}
+
+function pct(w, total) {
+  if (!total || total === 0) return '—';
+  return Math.round(w / total * 100) + '%';
+}
+function pctNum(w, total) {
+  if (!total || total === 0) return 0;
+  return Math.round(w / total * 100);
+}
+function rateClass(p) { return p >= 55 ? 'good' : p >= 45 ? 'ok' : 'bad'; }
+
+function renderStats(data) {
+  var o = data.overall || {};
+  var wins = parseInt(o.wins || 0), losses = parseInt(o.losses || 0);
+  var pushes = parseInt(o.pushes || 0), pending = parseInt(o.pending || 0);
+  var decided = wins + losses;
+  var winPct = pctNum(wins, decided);
+  var roi = decided > 0 ? ((wins - losses) / decided * 100).toFixed(1) : '0.0';
+  var streak = calcStreak(data.recent || []);
+
+  // KPI cards
+  document.getElementById('kpi-grid').innerHTML =
+    kpiCard('Picks Won',    wins,           'W record',         wins + '-' + losses, 'green') +
+    kpiCard('Picks Lost',   losses,         'L record',         'of ' + decided + ' decided', 'red') +
+    kpiCard('Win Rate',     pct(wins, decided), 'on decided picks', winPct >= 55 ? '🔥 Above breakeven' : winPct >= 50 ? '👍 Profitable' : '⚠️ Below breakeven', winPct >= 55 ? 'green' : winPct >= 50 ? 'gold' : 'red') +
+    kpiCard('ROI',          (roi > 0 ? '+' : '') + roi + '%', 'at -110 odds',    decided + ' picks decided', roi > 0 ? 'green' : 'red') +
+    kpiCard('Current Streak', streak.label, streak.type === 'W' ? 'wins in a row' : 'losses in a row', 'last ' + streak.count + ' picks', streak.type === 'W' ? 'green' : streak.type === 'L' ? 'red' : 'cyan') +
+    kpiCard('Pending',      pending,        'picks live/upcoming', 'not yet resolved', 'purple') +
+    kpiCard('Pushes',       pushes,         'exact line hits',  'money returned', 'cyan') +
+    kpiCard('Total Picks',  parseInt(o.total || 0), 'all time tracked', 'since ' + data.since, 'gold');
+
+  // By type table
+  var typeRows = (data.byType || []).map(function(r) {
+    var w = parseInt(r.wins||0), l = parseInt(r.losses||0), tot = parseInt(r.total||0);
+    var p = pctNum(w, w+l);
+    return '<tr>' +
+      '<td><b>' + (r.pick_type === 'spread' ? '📊 Spread' : '🎯 O/U Total') + '</b></td>' +
+      '<td style="color:var(--green)">' + w + '</td>' +
+      '<td style="color:var(--red)">' + l + '</td>' +
+      '<td style="color:var(--yellow)">' + (parseInt(r.pushes||0)) + '</td>' +
+      '<td><span class="win-pct ' + rateClass(p) + '">' + pct(w, w+l) + '</span></td>' +
+      '<td><div class="rate-bar-wrap"><div class="rate-bar ' + rateClass(p) + '" style="width:' + p + '%"></div></div></td>' +
+      '</tr>';
+  }).join('');
+  document.getElementById('tbl-type').innerHTML = typeRows || '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">No picks yet</td></tr>';
+
+  // By confidence table
+  var confRows = (data.byConf || []).map(function(r) {
+    var w = parseInt(r.wins||0), l = parseInt(r.losses||0);
+    var p = pctNum(w, w+l);
+    var stars = '⭐'.repeat(parseInt(r.model_conf||3));
+    return '<tr>' +
+      '<td>' + stars + '</td>' +
+      '<td style="color:var(--green)">' + w + '</td>' +
+      '<td style="color:var(--red)">' + l + '</td>' +
+      '<td><span class="win-pct ' + rateClass(p) + '">' + pct(w, w+l) + '</span></td>' +
+      '<td><div class="rate-bar-wrap"><div class="rate-bar ' + rateClass(p) + '" style="width:' + p + '%"></div></div></td>' +
+      '</tr>';
+  }).join('');
+  document.getElementById('tbl-conf').innerHTML = confRows || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">No confidence data yet</td></tr>';
+
+  // Streak boxes (last 30 picks)
+  var recentPicks = (data.recent || []).filter(function(r){ return r.result !== 'pending'; }).slice(0, 30);
+  document.getElementById('streak-boxes').innerHTML = recentPicks.map(function(r) {
+    return '<div class="sbox ' + r.result + '" title="' + (r.pick_side || r.pickSide || '') + '">' +
+      (r.result === 'win' ? 'W' : r.result === 'loss' ? 'L' : 'P') + '</div>';
+  }).join('');
+
+  // Recent picks table
+  var recentRows = (data.recent || []).map(function(r) {
+    var date = (r.game_date || r.date || '').slice(0,10);
+    var home = r.home_team || r.home || '', away = r.away_team || r.away || '';
+    var hs = r.home_score || r.homeScore || 0, as = r.away_score || r.awayScore || 0;
+    var pick = r.pick_side || r.pickSide || '—';
+    var ptype = r.pick_type || r.pickType || '—';
+    var line = r.line ? (ptype === 'spread' ? r.line : r.line) : '—';
+    var conf = '⭐'.repeat(parseInt(r.model_conf || r.modelConf || 3));
+    var result = r.result || 'pending';
+    return '<tr>' +
+      '<td style="color:var(--muted);font-family:\'DM Mono\',monospace;font-size:.66rem">' + date + '</td>' +
+      '<td><span class="team-tag">' + away + ' @ ' + home + '</span></td>' +
+      '<td><span class="score-txt">' + (r.status === 'scheduled' ? '—' : as + ' – ' + hs) + '</span></td>' +
+      '<td><span class="pick-txt">' + pick + '</span></td>' +
+      '<td style="color:var(--muted);font-size:.66rem">' + (ptype === 'spread' ? 'Spread' : 'O/U') + '</td>' +
+      '<td style="color:var(--orange);font-family:\'DM Mono\',monospace;font-size:.7rem">' + line + '</td>' +
+      '<td>' + conf + '</td>' +
+      '<td><span class="res ' + result + '">' + result.toUpperCase() + '</span></td>' +
+      '</tr>';
+  }).join('');
+  document.getElementById('tbl-recent').innerHTML = recentRows || '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:30px">No picks saved yet — data will appear after today\'s games</td></tr>';
+}
+
+function kpiCard(label, val, sub, sub2, color) {
+  return '<div class="kpi ' + (color||'') + '">' +
+    '<div class="kpi-label">' + label + '</div>' +
+    '<div class="kpi-val">' + val + '</div>' +
+    '<div class="kpi-sub">' + sub + '</div>' +
+    (sub2 ? '<div class="kpi-sub" style="margin-top:2px;color:var(--text2)">' + sub2 + '</div>' : '') +
+    '</div>';
+}
+
+function calcStreak(picks) {
+  var decided = picks.filter(function(p){ return p.result === 'win' || p.result === 'loss'; });
+  if (!decided.length) return { label: '—', count: 0, type: '—' };
+  var type = decided[0].result === 'win' ? 'W' : 'L';
+  var count = 0;
+  for (var i = 0; i < decided.length; i++) {
+    if ((decided[i].result === 'win' && type === 'W') || (decided[i].result === 'loss' && type === 'L')) count++;
+    else break;
+  }
+  return { label: count + type, count: count, type: type };
+}
+
+load(30);
+</script>
+</body>
+</html>
