@@ -392,44 +392,36 @@ const STREAK_TTL  = 30 * 60 * 1000; // 30 min
 async function fetchStreaks() {
   if (streakCache.data && Date.now() - streakCache.fetchedAt < STREAK_TTL) return streakCache.data;
 
-  // ESPN standings endpoint — returns current, home, road streaks per team
   const url = 'https://site.api.espn.com/apis/v2/sports/basketball/nba/standings?season=2025&seasontype=2&type=0';
   const data = await safeFetch(url);
   if (!data) return null;
 
-  const streaks = {}; // { "LAL": { current: "W3", home: "W2", away: "L1" } }
+  const streaks = {};
+  const NORM = { GS:'GSW', SA:'SAS', NO:'NOP', NY:'NYK', WSH:'WAS', UTAH:'UTA' };
 
-  // ESPN returns children (conferences) → standings entries
-  const groups = data.children || [];
-  for (const conf of groups) {
-    for (const div of (conf.children || [])) {
-      for (const entry of (div.standings?.entries || conf.standings?.entries || [])) {
-        const abbr = entry.team?.abbreviation;
-        if (!abbr) continue;
+  for (const conf of (data.children || [])) {
+    for (const entry of (conf.standings?.entries || [])) {
+      const abbr    = entry.team?.abbreviation;
+      if (!abbr) continue;
+      const ourAbbr = NORM[abbr] || abbr;
+      const stats   = entry.stats || [];
+      const get     = name => stats.find(s => s.name === name)?.displayValue || null;
 
-        // Normalize abbr to our format
-        const NORM = { GS:'GSW', SA:'SAS', NO:'NOP', NY:'NYK', WSH:'WAS', UTAH:'UTA' };
-        const ourAbbr = NORM[abbr] || abbr;
-
-        // Extract streak stats from stats array
-        const stats = entry.stats || [];
-        const getStat = name => stats.find(s => s.name === name || s.abbreviation === name);
-
-        const curStreak  = getStat('currentStreak')  || getStat('streak');
-        const homeStreak = getStat('homeStreak')      || getStat('homeRecord');
-        const awayStreak = getStat('awayStreak')      || getStat('awayRecord');
-
-        streaks[ourAbbr] = {
-          current: curStreak?.displayValue  || curStreak?.value  || null,
-          home:    homeStreak?.displayValue || null,
-          away:    awayStreak?.displayValue || null,
-          raw:     stats.map(s => ({ name: s.name, abbr: s.abbreviation, val: s.displayValue })),
-        };
-      }
+      // ESPN actual field names from debug:
+      // streak = current W/L streak (e.g. "L1", "W3")
+      // Home   = home record (e.g. "34-7")
+      // Road   = road record (e.g. "30-11")
+      // Last Ten Games = L10 record
+      streaks[ourAbbr] = {
+        current: get('streak'),
+        home:    get('Home'),
+        away:    get('Road'),
+        l10:     get('Last Ten Games'),
+      };
     }
   }
 
-  streakCache.data     = streaks;
+  streakCache.data      = streaks;
   streakCache.fetchedAt = Date.now();
   console.log('[streaks] loaded for', Object.keys(streaks).length, 'teams');
   return streaks;
@@ -987,14 +979,10 @@ app.get('/api/debug/odds', async (req, res) => {
 
 // Debug endpoint — test BDL PPG lookup for a player name
 app.get('/api/debug/streaks', async (req, res) => {
-  const url = 'https://site.api.espn.com/apis/v2/sports/basketball/nba/standings?season=2025&seasontype=2&type=0';
-  const data = await safeFetch(url);
-  if (!data) return res.json({ error: 'fetch failed' });
-  const firstChild = data.children?.[0];
-  const firstEntry = firstChild?.standings?.entries?.[0];
-  // Show ALL stats for first team so we can find streak fields
-  const allStats = firstEntry?.stats?.map(s => ({ name:s.name, abbr:s.abbreviation, val:s.displayValue }));
-  res.json({ teamAbbr: firstEntry?.team?.abbreviation, allStats });
+  streakCache.fetchedAt = 0;
+  const streaks = await fetchStreaks();
+  const team = req.query.team ? streaks?.[req.query.team.toUpperCase()] : null;
+  res.json({ total: Object.keys(streaks || {}).length, sample: team || streaks });
 });
 
 app.get('/api/debug/teamstats', async (req, res) => {
