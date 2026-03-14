@@ -140,7 +140,9 @@ const SUMMARY_TTL_CLOSED = 60 * 60 * 1000; // 1h when final (allows re-parse)
 async function fetchGameSummary(espnId, status) {
   const c = summaryCache[espnId];
   const ttl = status === 'closed' ? SUMMARY_TTL_CLOSED : SUMMARY_TTL_LIVE;
-  if (c && Date.now() - c.fetchedAt < ttl) return c.data;
+  // Invalidate cache if lastFive data is missing scores (old parse format)
+  const hasValidLastFive = c?.data?.lastFive && Object.values(c.data.lastFive).some(t => t?.all?.scored != null);
+  if (c && Date.now() - c.fetchedAt < ttl && hasValidLastFive) return c.data;
 
   const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${espnId}`;
   const raw = await safeFetch(url);
