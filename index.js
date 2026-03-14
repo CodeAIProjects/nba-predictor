@@ -38,7 +38,8 @@ const BDL_API_KEY  = process.env.BDL_API_KEY  || '';   // https://www.balldontli
 // ─── IN-MEMORY CACHE ──────────────────────────────────────────────────────────
 // { "YYYY-MM-DD": { games, odds, injuries, stats, fetchedAt } }
 const cache = {};
-const CACHE_TTL_MS = 30 * 1000; // 30 seconds for active day
+const CACHE_TTL_MS_LIVE = 10 * 1000; // 10 seconds when games are live
+const CACHE_TTL_MS      = 30 * 1000; // 30 seconds for active day (no live games)
 const ODDS_TTL_MS  = 5 * 60 * 1000; // 5 min for odds (save API quota)
 
 // ─── ESPN TEAM ID MAP ─────────────────────────────────────────────────────────
@@ -469,7 +470,7 @@ async function pollToday() {
     const hasGames  = existing?.games?.length > 0;
     // If games are live → 30s TTL. If games exist but none live → 30s TTL (game could start any moment).
     // Only use 60s TTL if we fetched and confirmed zero games today.
-    const ttl = (!hasGames) ? 60 * 1000 : CACHE_TTL_MS;
+    const ttl = (!hasGames) ? 60 * 1000 : isLive ? CACHE_TTL_MS_LIVE : CACHE_TTL_MS;
     if (existing && Date.now() - existing.fetchedAt < ttl) return;
 
     const data = await assembleGameData(dateStr);
@@ -523,7 +524,7 @@ async function pollLive() {
 
 // Start polling immediately then every 30s
 pollLive();
-setInterval(pollLive, 30000);
+setInterval(pollLive, 10000); // 10s — fast enough for live scores
 
 // ─── 7. API ROUTES ────────────────────────────────────────────────────────────
 
@@ -539,7 +540,7 @@ app.get('/api/data', async (req, res) => {
   const isToday = dateStr === today();
   const hasLive = cached?.games?.some(g => g.status === 'inprogress');
   // Always use short TTL for today or any date with live games
-  const ttl = (isToday || hasLive) ? CACHE_TTL_MS : 5 * 60 * 1000;
+  const ttl = hasLive ? CACHE_TTL_MS_LIVE : isToday ? CACHE_TTL_MS : 5 * 60 * 1000;
 
   if (cached && Date.now() - cached.fetchedAt < ttl) {
     return res.json({ ...cached, cached: true });
