@@ -456,21 +456,19 @@ function buildSeasonAvg(g) {
 
   // Home team — use their HOME game averages from L5
   var hSplit = l5h && l5h.home && l5h.home.games > 0 ? l5h.home : null;
-  var hScored  = hSplit ? hSplit.scored  : teamAvg(g.home).toFixed(1);
-  var hAllowed = hSplit ? hSplit.allowed : null;
-  var hGames   = hSplit ? '('+hSplit.games+' HG)' : '(season)';
+  var hScored   = hSplit ? hSplit.scored   : teamAvg(g.home).toFixed(1);
+  var hConceded = hSplit ? hSplit.conceded : null;
 
   // Away team — use their AWAY game averages from L5
   var aSplit = l5a && l5a.away && l5a.away.games > 0 ? l5a.away : null;
-  var aScored  = aSplit ? aSplit.scored  : teamAvg(g.away).toFixed(1);
-  var aAllowed = aSplit ? aSplit.allowed : null;
-  var aGames   = aSplit ? '('+aSplit.games+' AG)' : '(season)';
+  var aScored   = aSplit ? aSplit.scored   : teamAvg(g.away).toFixed(1);
+  var aConceded = aSplit ? aSplit.conceded : null;
 
-  var hLine = hAllowed
-    ? '<span style="color:var(--green)">'+hScored+'</span> <span style="color:var(--muted)">sc</span> / <span style="color:var(--red)">'+hAllowed+'</span> <span style="color:var(--muted)">con</span>'
+  var hLine = hConceded
+    ? '<span style="color:var(--green)">'+hScored+'</span> <span style="color:var(--muted)">sc</span> / <span style="color:var(--red)">'+hConceded+'</span> <span style="color:var(--muted)">con</span>'
     : hScored+' pts';
-  var aLine = aAllowed
-    ? '<span style="color:var(--green)">'+aScored+'</span> <span style="color:var(--muted)">sc</span> / <span style="color:var(--red)">'+aAllowed+'</span> <span style="color:var(--muted)">con</span>'
+  var aLine = aConceded
+    ? '<span style="color:var(--green)">'+aScored+'</span> <span style="color:var(--muted)">sc</span> / <span style="color:var(--red)">'+aConceded+'</span> <span style="color:var(--muted)">con</span>'
     : aScored+' pts';
 
   return '<div class="sl">'+g.home+' HOME GAMES</div><div class="sv">'+hLine+'</div>' +
@@ -485,11 +483,11 @@ function buildL3Avg(g) {
     if (!l5) return '<div class="sl">'+team+' L5</div><div class="sv">—</div>';
     // For L3: use all-game avg from last 5 (best we have without more API calls)
     var split = isHome ? l5.all : l5.all;
-    var scored  = split && split.scored  ? split.scored  : '—';
-    var allowed = split && split.allowed ? split.allowed : '—';
+    var scored   = split && split.scored   ? split.scored   : null;
+    var conceded = split && split.conceded ? split.conceded : null;
     var rec = l5.wins+'W-'+l5.losses+'L';
-    var line = scored !== '—'
-      ? '<span style="color:var(--green)">'+scored+'</span> <span style="color:var(--muted)">sc</span> / <span style="color:var(--red)">'+allowed+'</span> <span style="color:var(--muted)">con</span>'
+    var line = scored
+      ? '<span style="color:var(--green)">'+scored+'</span> <span style="color:var(--muted)">sc</span> / <span style="color:var(--red)">'+conceded+'</span> <span style="color:var(--muted)">con</span>'
       : rec;
     return '<div class="sl">'+team+' LAST 5</div><div class="sv">'+line+'</div>';
   }
