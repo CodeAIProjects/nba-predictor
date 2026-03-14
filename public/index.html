@@ -396,7 +396,7 @@ function render(data) {
     '<th>GAME / RESULT</th>' +
     '<th>SEASONAL AVG<br>Home / Away</th>' +
     '<th>LAST 3 AVG<br>Home / Away</th>' +
-    '<th>TOTAL AVG<br>Home | Away</th>' +
+    '<th>O/U ANALYSIS</th>' +
     '<th>MARKET LINE<br>Spread · O/U</th>' +
     '<th>B2B</th>' +
     '<th>LINE MOVE<br>SHARP?</th>' +
@@ -543,20 +543,117 @@ function buildL3Avg(g) {
   return fmtL5(g.home, ssh, true) + fmtL5(g.away, ssa, false);
 }
 
-function buildTotalAvg(g) {
-  var hA = teamAvg(g.home), aA = teamAvg(g.away);
-  var combined = (hA + aA).toFixed(1);
-  var total = g.odds && g.odds.total;
-  var diff = total ? (parseFloat(combined) - parseFloat(total)).toFixed(1) : null;
-  var diffStr = diff ? ' (' + (diff > 0 ? '+' : '') + diff + ' vs line)' : '';
-  var lean = calcScoringOULean(g, false);
-  var leanStr = '';
-  if (lean && lean.lean !== 'NEUTRAL') {
-    var leanCol = lean.lean === 'OVER' ? '#4ade80' : '#93c5fd';
-    leanStr = '\n<span style="color:'+leanCol+';font-weight:700">→ '+lean.lean+' '+lean.strength+'</span>' +
-              (lean.vsLine ? ' <span style="color:#475569">(proj '+lean.projTotal+', '+(lean.vsLine>0?'+':'')+lean.vsLine+')</span>' : '');
+function buildOUAnalysis(g) {
+  var ss  = g.seasonStats || {};
+  var ssh = ss[g.home];
+  var ssa = ss[g.away];
+  var total = g.odds && g.odds.total ? parseFloat(g.odds.total) : null;
+
+  // ── SEASON CROSS-CHECK ──────────────────────────────────────────────────
+  var sHsc  = ssh && ssh.home ? parseFloat(ssh.home.scored)   : null;
+  var sHcon = ssh && ssh.home ? parseFloat(ssh.home.conceded) : null;
+  var sAsc  = ssa && ssa.away ? parseFloat(ssa.away.scored)   : null;
+  var sAcon = ssa && ssa.away ? parseFloat(ssa.away.conceded) : null;
+
+  // Edge A: home offense vs away defense (home sc - away con)
+  // Edge B: away offense vs home defense (away sc - home con)
+  var edgeAS = (sHsc != null && sAcon != null) ? (sHsc - sAcon) : null;
+  var edgeBS = (sAsc != null && sHcon != null) ? (sAsc - sHcon) : null;
+
+  // ── L5 CROSS-CHECK ──────────────────────────────────────────────────────
+  var l5Hsc  = ssh && ssh.home ? parseFloat(ssh.home.last5scored)   : null;
+  var l5Hcon = ssh && ssh.home ? parseFloat(ssh.home.last5conceded) : null;
+  var l5Asc  = ssa && ssa.away ? parseFloat(ssa.away.last5scored)   : null;
+  var l5Acon = ssa && ssa.away ? parseFloat(ssa.away.last5conceded) : null;
+
+  var edgeAL = (l5Hsc != null && l5Acon != null) ? (l5Hsc - l5Acon) : null;
+  var edgeBL = (l5Asc != null && l5Hcon != null) ? (l5Asc - l5Hcon) : null;
+
+  // ── WEIGHTED SCORE (L5 = 1.5x weight) ───────────────────────────────────
+  var signals = [];
+  if (edgeAS != null) signals.push({ val: edgeAS, w: 1.0,  lbl: g.home+' att vs '+g.away+' def', src: 'S' });
+  if (edgeBS != null) signals.push({ val: edgeBS, w: 1.0,  lbl: g.away+' att vs '+g.home+' def', src: 'S' });
+  if (edgeAL != null) signals.push({ val: edgeAL, w: 1.5,  lbl: g.home+' att vs '+g.away+' def', src: 'L5' });
+  if (edgeBL != null) signals.push({ val: edgeBL, w: 1.5,  lbl: g.away+' att vs '+g.home+' def', src: 'L5' });
+
+  if (!signals.length) {
+    // Fallback to simple team avgs
+    var hA = teamAvg(g.home), aA = teamAvg(g.away);
+    var proj = (hA + aA).toFixed(1);
+    var gap = total ? (parseFloat(proj) - total).toFixed(1) : null;
+    var txt = '<div class="sv2">'+g.home+': '+hA.toFixed(1)+' / '+g.away+': '+aA.toFixed(1)+'<br>Proj: '+proj+(gap ? ' ('+(gap>0?'+':'')+gap+' vs line)' : '')+'</div>';
+    return txt;
   }
-  return '<div class="sv2">'+g.home+': '+hA.toFixed(1)+'\n'+g.away+': '+aA.toFixed(1)+'\nTotal: '+combined+diffStr+leanStr+'</div>';
+
+  var totalWeight   = signals.reduce(function(a, s) { return a + s.w; }, 0);
+  var weightedScore = signals.reduce(function(a, s) { return a + (s.val > 0 ? s.w : -s.w); }, 0);
+  var overs  = signals.filter(function(s){ return s.val > 0; }).length;
+  var unders = signals.filter(function(s){ return s.val < 0; }).length;
+
+  // Lean direction
+  var lean = weightedScore > 0 ? 'OVER' : weightedScore < 0 ? 'UNDER' : 'NEUTRAL';
+
+  // Strength — how many signals agree and magnitude
+  var avgMag = signals.reduce(function(a,s){ return a+Math.abs(s.val); }, 0) / signals.length;
+  var agreement = Math.max(overs, unders); // how many on winning side
+  var strength = '';
+  if (lean !== 'NEUTRAL') {
+    if (agreement === signals.length && avgMag > 6) strength = '🔥🔥🔥';
+    else if (agreement === signals.length) strength = '🔥🔥';
+    else if (agreement >= signals.length * 0.75) strength = '🔥';
+    else strength = '⚠️';
+  }
+
+  // Projected total (weighted avg of season + L5 projected)
+  var projS = (sHsc != null && sAsc != null) ? (sHsc + sAsc) : null;
+  var projL = (l5Hsc != null && l5Asc != null) ? (l5Hsc + l5Asc) : null;
+  var proj = projS && projL ? ((projS + projL * 1.5) / 2.5).toFixed(1)
+           : projS ? projS.toFixed(1)
+           : projL ? projL.toFixed(1) : null;
+  var gap = (proj && total) ? (parseFloat(proj) - total).toFixed(1) : null;
+
+  // Colors
+  var leanCol  = lean === 'OVER' ? '#4ade80' : lean === 'UNDER' ? '#93c5fd' : '#64748b';
+  var gapColor = gap > 0 ? '#4ade80' : '#f87171';
+
+  // Edge display rows
+  function edgeRow(label, val, src) {
+    if (val == null) return '';
+    var col = val > 0 ? '#4ade80' : '#f87171';
+    var sign = val > 0 ? '+' : '';
+    return '<div style="font-size:.6rem;color:#64748b;margin-top:2px">'+
+      '<span style="color:'+col+';font-weight:700">'+sign+val.toFixed(1)+'</span>'+
+      ' <span style="color:#475569">['+src+']</span> '+label+
+    '</div>';
+  }
+
+  var html = '<div style="line-height:1.5">';
+
+  // Season edges
+  if (edgeAS != null) html += edgeRow(g.home+' att / '+g.away+' def', edgeAS, 'SZN');
+  if (edgeBS != null) html += edgeRow(g.away+' att / '+g.home+' def', edgeBS, 'SZN');
+  // L5 edges
+  if (edgeAL != null) html += edgeRow(g.home+' att / '+g.away+' def', edgeAL, 'L5');
+  if (edgeBL != null) html += edgeRow(g.away+' att / '+g.home+' def', edgeBL, 'L5');
+
+  // Final verdict
+  if (lean !== 'NEUTRAL') {
+    html += '<div style="margin-top:5px;font-weight:700;font-size:.72rem;color:'+leanCol+'">→ '+lean+' '+strength+'</div>';
+  } else {
+    html += '<div style="margin-top:5px;font-size:.68rem;color:#64748b">→ ⚠️ CONFLICTING</div>';
+  }
+
+  // Projected vs line
+  if (proj) {
+    html += '<div style="font-size:.6rem;color:#64748b;margin-top:2px">'+
+      'Proj <span style="color:#e2e8f0">'+proj+'</span>'+
+      (total ? ' vs line <span style="color:#e2e8f0">'+total+'</span>' +
+               (gap ? ' <span style="color:'+gapColor+'">('+( gap > 0 ? '+' : '')+gap+')</span>' : '') : '')+
+    '</div>';
+  }
+
+  html += '</div>';
+  return html;
 }
 
 // O/U prediction from scoring matchup:
@@ -875,7 +972,7 @@ function renderRow(g, ev) {
 
   var seasonAvgCell = buildSeasonAvg(g);
   var l3AvgCell     = buildL3Avg(g);
-  var totalAvgCell  = buildTotalAvg(g);
+  var totalAvgCell  = buildOUAnalysis(g);
   var lineMoveCell  = buildLineMoveCell(g);
   var pickCells = picks.map(function(p) {
     var pu=p.toUpperCase(), isOU=(pu.indexOf('OVER')>=0||pu.indexOf('UNDER')>=0);
