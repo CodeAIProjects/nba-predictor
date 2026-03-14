@@ -328,24 +328,7 @@ function clientToday() {
 
 function init() {
   loadDates().then(function() {
-    var today = clientToday();
-    var chips = Array.from(document.querySelectorAll('.date-chip'));
-
-    // Find nearest date with games, preferring today
-    var best = today;
-    var bestDiff = Infinity;
-    chips.forEach(function(c) {
-      var d = c.dataset.date;
-      var ctEl = c.querySelector('.chip-count');
-      var ct = ctEl ? ctEl.textContent : '';
-      var hasGames = ct && !ct.includes('No') && parseInt(ct) > 0;
-      if (hasGames) {
-        var diff = Math.abs(new Date(d) - new Date(today));
-        if (diff < bestDiff) { bestDiff = diff; best = d; }
-      }
-    });
-
-    selectDate(best);
+    selectDate(clientToday());
     fixSticky();
   });
 }
