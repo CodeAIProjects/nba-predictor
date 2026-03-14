@@ -281,28 +281,6 @@ function loadGames(ds) {
     return r.json();
   }).then(function(data) {
     document.getElementById('last-updated').textContent = new Date().toLocaleTimeString();
-
-  // Flip animation for live score changes
-  games.forEach(function(g) {
-    if (g.status !== 'inprogress') return;
-    var prev = scoreCache[g.espnId];
-    var curA = parseInt(g.awayScore) || 0;
-    var curH = parseInt(g.homeScore) || 0;
-    if (prev && (prev.away !== curA || prev.home !== curH)) {
-      // Find score elements and trigger flip
-      var row = document.querySelector('[data-eid="' + g.espnId + '"]');
-      if (row) {
-        var snums = row.querySelectorAll('.snum');
-        snums.forEach(function(el) {
-          el.classList.remove('score-flip');
-          void el.offsetWidth; // force reflow
-          el.classList.add('score-flip');
-          setTimeout(function() { el.classList.remove('score-flip'); }, 550);
-        });
-      }
-    }
-    scoreCache[g.espnId] = { away: curA, home: curH };
-  });
     render(data);
   }).catch(function(e) {
     wrap.innerHTML = '<div class="error-state"><div class="state-icon">⚠️</div><div class="state-title">FAILED TO LOAD</div><div class="state-sub">' + e.message + '</div></div>';
@@ -337,6 +315,27 @@ function render(data) {
     '<th>KEY PICKS</th>' +
     '<th style="width:56px">MORE</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>';
+
+  // Flip animation on score change for live games
+  games.forEach(function(g) {
+    if (g.status !== 'inprogress') return;
+    var prev = scoreCache[g.espnId];
+    var curA = parseInt(g.awayScore) || 0;
+    var curH = parseInt(g.homeScore) || 0;
+    if (prev && (prev.away !== curA || prev.home !== curH)) {
+      var row = document.querySelector('[data-eid="' + g.espnId + '"]');
+      if (row) {
+        row.querySelectorAll('.snum').forEach(function(el) {
+          el.classList.remove('score-flip');
+          void el.offsetWidth;
+          el.classList.add('score-flip');
+          setTimeout(function() { el.classList.remove('score-flip'); }, 550);
+        });
+      }
+    }
+    scoreCache[g.espnId] = { away: curA, home: curH };
+  });
+
   openAccs.forEach(function(id) {
     var row = document.getElementById(id), btn = document.getElementById('btn-' + id);
     if (row) row.classList.remove('closed');
