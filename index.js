@@ -38,8 +38,23 @@ const BDL_API_KEY  = process.env.BDL_API_KEY  || '';   // https://www.balldontli
 // ─── IN-MEMORY CACHE ──────────────────────────────────────────────────────────
 // { "YYYY-MM-DD": { games, odds, injuries, stats, fetchedAt } }
 const cache = {};
-const CACHE_TTL_MS_LIVE = 10 * 1000; // 10 seconds when games are live
-const CACHE_TTL_MS      = 30 * 1000; // 30 seconds for active day (no live games)
+// ─── POLLING INTERVALS ────────────────────────────────────────────────────────
+// Pre-game  (≤10 min before tip)  : 30s  — catch tip-off quickly
+// Live      (in progress)         : 10s  — real-time scores
+// Post-game (0–10 min after final): 10s  — confirm final score
+// Settled   (10+ min after final) : 1h   — keep fresh, don't hammer ESPN
+const POLL_PRE_GAME  = 30  * 1000;
+const POLL_LIVE      = 10  * 1000;
+const POLL_POST_GAME = 10  * 1000;
+const POLL_SETTLED   = 60  * 60 * 1000;
+const POST_GAME_WINDOW = 10 * 60 * 1000; // 10 min post-final window
+
+// Legacy aliases used elsewhere
+const CACHE_TTL_MS_LIVE = POLL_LIVE;
+const CACHE_TTL_MS      = POLL_PRE_GAME;
+
+// Track when each game was first seen as 'closed' { espnId: timestamp }
+const gameClosedAt = {};
 const ODDS_TTL_MS  = 5 * 60 * 1000; // 5 min for odds (save API quota)
 
 // ─── ESPN TEAM ID MAP ─────────────────────────────────────────────────────────
@@ -856,15 +871,42 @@ function resolveResult(game, pickType) {
   return 'pending';
 }
 
+function gameStateTTL(games) {
+  // Determine the minimum required TTL across all games
+  if (!games?.length) return 60 * 1000;
+  const now = Date.now();
+  let minTTL = POLL_SETTLED;
+
+  for (const g of games) {
+    if (g.status === 'inprogress') {
+      minTTL = Math.min(minTTL, POLL_LIVE);
+      continue;
+    }
+    if (g.status === 'closed') {
+      // Track first time we saw this game as closed
+      if (!gameClosedAt[g.espnId]) gameClosedAt[g.espnId] = now;
+      const elapsed = now - gameClosedAt[g.espnId];
+      const ttl = elapsed < POST_GAME_WINDOW ? POLL_POST_GAME : POLL_SETTLED;
+      minTTL = Math.min(minTTL, ttl);
+      continue;
+    }
+    if (g.status === 'scheduled' && g.startTime) {
+      // Pre-game: poll faster if within 10 min of tip-off
+      const msUntilTip = new Date(g.startTime).getTime() - now;
+      if (msUntilTip <= 10 * 60 * 1000 && msUntilTip > -60000) {
+        minTTL = Math.min(minTTL, POLL_PRE_GAME);
+      }
+    }
+  }
+  return minTTL;
+}
+
 async function pollToday() {
   const dateStr = today();
   try {
     const existing = cache[dateStr];
-    const isLive    = existing?.games?.some(g => g.status === 'inprogress');
     const hasGames  = existing?.games?.length > 0;
-    // If games are live → 30s TTL. If games exist but none live → 30s TTL (game could start any moment).
-    // Only use 60s TTL if we fetched and confirmed zero games today.
-    const ttl = (!hasGames) ? 60 * 1000 : isLive ? CACHE_TTL_MS_LIVE : CACHE_TTL_MS;
+    const ttl = hasGames ? gameStateTTL(existing.games) : 60 * 1000;
     if (existing && Date.now() - existing.fetchedAt < ttl) return;
 
     const data = await assembleGameData(dateStr);
@@ -916,9 +958,10 @@ async function pollLive() {
   }
 }
 
-// Start polling immediately then every 30s
+// Smart polling — checks every 10s but gameStateTTL controls actual fetches
+// This way we never hammer ESPN; the TTL gate inside pollToday/pollLive handles rate
 pollLive();
-setInterval(pollLive, 10000); // 10s — fast enough for live scores
+setInterval(pollLive, POLL_LIVE); // Check every 10s; TTL gates actual ESPN requests
 
 // ─── 7. API ROUTES ────────────────────────────────────────────────────────────
 
@@ -932,9 +975,10 @@ app.get('/api/data', async (req, res) => {
 
   const cached = cache[dateStr];
   const isToday = dateStr === today();
-  const hasLive = cached?.games?.some(g => g.status === 'inprogress');
-  // Always use short TTL for today or any date with live games
-  const ttl = hasLive ? CACHE_TTL_MS_LIVE : isToday ? CACHE_TTL_MS : 5 * 60 * 1000;
+  // Smart TTL: use gameStateTTL for today, 5 min for other dates
+  const ttl = isToday
+    ? (cached?.games?.length ? gameStateTTL(cached.games) : 60 * 1000)
+    : (cached?.games?.some(g => g.status === 'inprogress') ? POLL_LIVE : 5 * 60 * 1000);
 
   if (cached && Date.now() - cached.fetchedAt < ttl) {
     return res.json({ ...cached, cached: true });
