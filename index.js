@@ -225,10 +225,19 @@ async function fetchGameSummary(espnId, status) {
   for (const teamL5 of (raw.lastFiveGames || [])) {
     const abbr = teamL5.team?.abbreviation;
     if (!abbr) continue;
+    const events = teamL5.events || [];
+    // Each event: { gameResult, score, opponentScore, atVs, ... }
+    const scored   = events.map(e => parseInt(e.score || e.teamScore || 0)).filter(s => s > 0);
+    const allowed  = events.map(e => parseInt(e.opponentScore || e.opponentTeamScore || 0)).filter(s => s > 0);
+    const avgScored  = scored.length  ? (scored.reduce((a,b)=>a+b,0)/scored.length).toFixed(1)  : null;
+    const avgAllowed = allowed.length ? (allowed.reduce((a,b)=>a+b,0)/allowed.length).toFixed(1) : null;
     lastFive[abbr] = {
-      record: teamL5.events?.map(e => e.atVs + ' ' + (e.gameResult || '')).join(', ') || '',
-      wins:   teamL5.events?.filter(e => e.gameResult === 'W').length || 0,
-      losses: teamL5.events?.filter(e => e.gameResult === 'L').length || 0,
+      wins:      events.filter(e => e.gameResult === 'W').length,
+      losses:    events.filter(e => e.gameResult === 'L').length,
+      avgScored,
+      avgAllowed,
+      // raw events for debugging
+      events:    events.map(e => ({ result: e.gameResult, score: e.score, opp: e.opponentScore, atVs: e.atVs })),
     };
   }
 
@@ -778,6 +787,17 @@ app.get('/api/debug/odds', async (req, res) => {
 });
 
 // Debug endpoint — test BDL PPG lookup for a player name
+app.get('/api/debug/last5', async (req, res) => {
+  const ds = req.query.date || today();
+  const games = await fetchScores(ds);
+  if (!games.length) return res.json({ error: 'no games' });
+  const gameId = req.query.id || games[0].espnId;
+  const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${gameId}`;
+  const data = await safeFetch(url);
+  const l5 = data?.lastFiveGames || [];
+  res.json({ gameId, teamCount: l5.length, sample: l5[0] });
+});
+
 app.get('/api/debug/ppg', async (req, res) => {
   // Use a known completed game from yesterday
   const ds = req.query.date || '2026-03-13';
