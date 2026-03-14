@@ -24,7 +24,7 @@
   @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
   .refresh-info{font-size:.64rem;color:var(--muted);font-family:"DM Mono",monospace}
   #last-updated{color:var(--cyan)}
-  .date-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:57px;z-index:95}
+  .date-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:95}
   .date-label{font-family:"DM Mono",monospace;font-size:.6rem;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;white-space:nowrap}
   .date-scroll{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;flex:1}
   .date-scroll::-webkit-scrollbar{height:3px}
@@ -41,7 +41,7 @@
   .date-chip.today.active{background:rgba(245,197,24,.12)}
   .chip-day{display:block;font-size:1.3rem;font-weight:800;line-height:1;color:var(--text)}
   .chip-name{display:block;font-size:.58rem;color:var(--muted);margin-top:3px;letter-spacing:.5px;text-transform:uppercase}
-  .summary-bar{background:#0a1220;border-bottom:1px solid var(--border);padding:8px 24px;display:flex;gap:20px;align-items:center;flex-wrap:wrap;position:sticky;top:103px;z-index:90}
+  .summary-bar{background:#0a1220;border-bottom:1px solid var(--border);padding:8px 24px;display:flex;gap:20px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:90}
   .s-item{display:flex;flex-direction:column}
   .s-label{color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-size:.58rem;font-family:"DM Mono",monospace}
   .s-val{font-family:"Bebas Neue",sans-serif;font-size:1.1rem;letter-spacing:1px}
@@ -49,7 +49,7 @@
   .sdiv{width:1px;height:24px;background:var(--border)}
   .table-wrap{padding:14px 12px 60px;min-width:1100px}
   table{width:100%;border-collapse:collapse}
-  thead th{background:#0f1e35;color:var(--gold);font-family:"DM Mono",monospace;font-size:.58rem;letter-spacing:1.5px;text-transform:uppercase;padding:9px 8px;text-align:center;white-space:nowrap;position:sticky;top:148px;z-index:50;box-shadow:inset 0 1px 0 var(--border),inset 0 -1px 0 var(--border)}
+  thead th{background:#0f1e35;color:var(--gold);font-family:"DM Mono",monospace;font-size:.58rem;letter-spacing:1.5px;text-transform:uppercase;padding:9px 8px;text-align:center;white-space:nowrap;position:sticky;top:0;z-index:50;box-shadow:inset 0 1px 0 var(--border),inset 0 -1px 0 var(--border)}
   tbody tr.game-row td{padding:8px;vertical-align:middle;border-bottom:1px solid rgba(30,45,69,.5);text-align:center;transition:background .15s}
   tbody tr.game-row:hover td{background:rgba(56,189,248,.025)}
   tbody tr.game-row td:first-child{text-align:left;padding-left:10px}
@@ -272,6 +272,23 @@ var activeDate = null, refreshTimer = null, countdownInt = null, countdownVal = 
 var isLiveMode = false;
 var scoreCache = {}; // { espnId: { away: N, home: N } }
 
+function fixSticky() {
+  var header     = document.querySelector('header');
+  var dateBar    = document.querySelector('.date-bar');
+  var summaryBar = document.querySelector('.summary-bar');
+  var thead      = document.querySelector('thead');
+  if (!header) return;
+  var h1 = header.offsetHeight;
+  var h2 = dateBar  ? dateBar.offsetHeight  : 0;
+  var h3 = summaryBar ? summaryBar.offsetHeight : 0;
+  if (dateBar)    dateBar.style.top    = h1 + 'px';
+  if (summaryBar) summaryBar.style.top = (h1 + h2) + 'px';
+  if (thead) {
+    var ths = thead.querySelectorAll('th');
+    ths.forEach(function(th) { th.style.top = (h1 + h2 + h3) + 'px'; });
+  }
+}
+
 function clientToday() {
   // Use client's LOCAL date, not server UTC date
   var now = new Date();
@@ -284,6 +301,7 @@ function clientToday() {
 function init() {
   loadDates().then(function() {
     selectDate(clientToday());
+    fixSticky();
   });
 }
 
@@ -419,6 +437,7 @@ function render(data) {
     if (row) row.classList.remove('closed');
     if (btn) btn.classList.add('open');
   });
+  fixSticky();
 }
 
 function evaluateGame(g) {
