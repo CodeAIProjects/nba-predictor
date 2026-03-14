@@ -605,24 +605,33 @@ app.get('/api/debug/odds', async (req, res) => {
 
 // Debug endpoint — test BDL PPG lookup for a player name
 app.get('/api/debug/ppg', async (req, res) => {
-  const abbr = (req.query.team || 'LAL').toUpperCase();
-  const tid = ESPN_TEAM_IDS[abbr];
-  const aid = '1966'; // LeBron James ESPN ID — known good player
+  // Get a recent game ID from today or yesterday
+  const ds = req.query.date || today();
+  const games = await fetchScores(ds);
+  if (!games.length) return res.json({ error: 'no games for ' + ds });
 
-  // Test 4 different ESPN endpoints for player stats
-  const urls = [
-    `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/athletes/${aid}`,
-    `https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/seasons/2026/athletes/${aid}/statistics/0`,
-    `https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/seasons/2026/athletes/${aid}/statistics`,
-    `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/athletes/${aid}/overview`,
-  ];
+  const gameId = req.query.id || games[0].espnId;
+  const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${gameId}`;
+  const data = await safeFetch(url);
+  if (!data) return res.json({ error: 'summary fetch failed', url });
 
-  const results = await Promise.all(urls.map(async url => {
-    const d = await safeFetch(url);
-    return { url, keys: d ? Object.keys(d) : null, sample: d };
-  }));
+  // Show top-level keys and dig into boxscore
+  const topKeys = Object.keys(data);
+  const boxKeys = data.boxscore ? Object.keys(data.boxscore) : null;
+  const firstTeamPlayers = data.boxscore?.players?.[0]?.statistics?.[0];
 
-  res.json({ aid, results });
+  res.json({
+    gameId, url,
+    topKeys,
+    boxKeys,
+    firstTeamPlayersSample: firstTeamPlayers ? {
+      keys: Object.keys(firstTeamPlayers),
+      names: firstTeamPlayers.names?.slice(0, 10),
+      labels: firstTeamPlayers.labels?.slice(0, 10),
+      firstAthlete: firstTeamPlayers.athletes?.[0]
+    } : null,
+    games: games.map(g => ({ id: g.espnId, home: g.home, away: g.away, status: g.status }))
+  });
 });
 
 // GET /api/stats?days=30 — model performance
