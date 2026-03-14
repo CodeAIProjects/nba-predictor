@@ -927,10 +927,8 @@ function triggerZoom(el) {
 
 
 function buildStreakCell(g) {
-  var sh  = g.streaks    && g.streaks[g.home];
-  var sa  = g.streaks    && g.streaks[g.away];
-  var ssh = g.seasonStats && g.seasonStats[g.home];
-  var ssa = g.seasonStats && g.seasonStats[g.away];
+  var sh = g.streaks && g.streaks[g.home];
+  var sa = g.streaks && g.streaks[g.away];
 
   function sb(val) {
     if (!val) return '<span style="color:var(--muted)">—</span>';
@@ -938,45 +936,21 @@ function buildStreakCell(g) {
     return '<span style="color:'+(w?'var(--green)':'var(--red)')+';font-weight:700">'+val+'</span>';
   }
 
-  function wlBar(wins, games, label) {
-    if (!games) return '';
-    var losses = games - wins;
-    var wPct   = Math.round(wins / games * 100);
-    var lPct   = 100 - wPct;
-    var col    = wPct >= 55 ? 'var(--green)' : wPct <= 45 ? 'var(--red)' : 'var(--yellow)';
-    return '<div style="margin-bottom:4px">'+
-      '<div style="display:flex;justify-content:space-between;font-size:.52rem;color:var(--muted);margin-bottom:1px">'+
-        '<span>'+label+'</span>'+
-        '<span style="color:'+col+';font-weight:700">'+wins+'–'+losses+'</span>'+
+  function teamRow(team, s) {
+    if (!s) return '<div style="margin-bottom:5px"><div style="font-size:.6rem;color:var(--gold);font-weight:700;letter-spacing:.5px">'+team+'</div><div style="font-size:.68rem;color:var(--muted)">—</div></div>';
+    return '<div style="margin-bottom:6px;line-height:1.5">'+
+      '<div style="font-size:.6rem;color:var(--gold);font-weight:700;letter-spacing:.5px;margin-bottom:1px">'+team+'</div>'+
+      '<div style="font-size:.72rem">'+
+        '<span style="color:var(--muted);font-size:.55rem">STK </span>'+sb(s.current)+
       '</div>'+
-      '<div style="width:100%;height:4px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;display:flex">'+
-        '<div style="width:'+wPct+'%;background:var(--green);opacity:.75;border-radius:2px 0 0 2px"></div>'+
-        '<div style="width:'+lPct+'%;background:var(--red);opacity:.55;border-radius:0 2px 2px 0"></div>'+
+      '<div style="font-size:.65rem">'+
+        '<span style="color:var(--muted);font-size:.55rem">H </span>'+sb(s.home)+
+        '<span style="color:var(--muted);font-size:.55rem"> A </span>'+sb(s.away)+
       '</div>'+
     '</div>';
   }
 
-  function teamRow(team, s, ss) {
-    if (!s && !ss) return '<div style="margin-bottom:6px"><div style="font-size:.6rem;color:var(--gold);font-weight:700;letter-spacing:.5px">'+team+'</div><div style="font-size:.68rem;color:var(--muted)">—</div></div>';
-    var hW = ss && ss.home ? ss.home.wins : null;
-    var hG = ss && ss.home ? ss.home.games : null;
-    var aW = ss && ss.away ? ss.away.wins : null;
-    var aG = ss && ss.away ? ss.away.games : null;
-    var totalW = (hW != null && aW != null) ? hW + aW : null;
-    var totalG = (hG != null && aG != null) ? hG + aG : null;
-    return '<div style="margin-bottom:7px">'+
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">'+
-        '<span style="font-size:.6rem;color:var(--gold);font-weight:700;letter-spacing:.5px">'+team+'</span>'+
-        (s ? '<span style="font-size:.62rem"><span style="color:var(--muted);font-size:.52rem">STK </span>'+sb(s.current)+'</span>' : '')+
-      '</div>'+
-      (totalW != null ? wlBar(totalW, totalG, 'Overall') : '')+
-      (hW != null ? wlBar(hW, hG, 'Home') : '')+
-      (aW != null ? wlBar(aW, aG, 'Away') : '')+
-      (s ? '<div style="font-size:.6rem;margin-top:1px"><span style="color:var(--muted);font-size:.52rem">H </span>'+sb(s.home)+'<span style="color:var(--muted);font-size:.52rem"> A </span>'+sb(s.away)+'</div>' : '')+
-    '</div>';
-  }
-
-  return teamRow(g.home, sh, ssh) + teamRow(g.away, sa, ssa);
+  return teamRow(g.home, sh) + teamRow(g.away, sa);
 }
 
 
