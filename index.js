@@ -909,9 +909,29 @@ app.get('/api/debug/odds', async (req, res) => {
 // Debug endpoint — test BDL PPG lookup for a player name
 app.get('/api/debug/teamstats', async (req, res) => {
   const abbr = (req.query.team || 'LAL').toUpperCase();
-  delete teamStatsCache[abbr]; // force fresh fetch
-  const stats = await fetchTeamSeasonStats(abbr);
-  res.json({ abbr, stats });
+  const tid = ESPN_TEAM_IDS[abbr];
+
+  // Fetch raw schedule and show exactly what we get
+  const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/schedule`;
+  const data = await safeFetch(url);
+
+  const events = data?.events || [];
+  const sampleEvent = events.find(e => e.status?.type?.name === 'STATUS_FINAL') || events[0];
+  const comp = sampleEvent?.competitions?.[0];
+  const competitors = comp?.competitors || [];
+
+  res.json({
+    abbr, tid, url,
+    totalEvents: events.length,
+    sampleEventKeys: sampleEvent ? Object.keys(sampleEvent) : null,
+    sampleCompKeys:  comp ? Object.keys(comp) : null,
+    competitors: competitors.map(c => ({
+      homeAway: c.homeAway,
+      score: c.score,
+      teamAbbr: c.team?.abbreviation,
+      teamDisplayName: c.team?.displayName,
+    })),
+  });
 });
 
 app.get('/api/debug/last5raw', async (req, res) => {
