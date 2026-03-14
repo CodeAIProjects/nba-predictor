@@ -338,7 +338,7 @@ function render(data) {
   // Odometer: DOM rebuilds every poll via innerHTML.
   // Strategy: snap to PREVIOUS score (or current if first time), then animate to current.
   games.forEach(function(g) {
-    if (g.status !== 'inprogress') return;
+    if (g.status === 'scheduled') return;
     var curA = parseInt(g.awayScore) || 0;
     var curH = parseInt(g.homeScore) || 0;
     var prev = scoreCache[g.espnId];
@@ -467,7 +467,7 @@ function renderRow(g, ev) {
   var anyWin = results.some(function(r){return r==='win'||r==='winning';});
   var allLoss = results.every(function(r){return r==='loss'||r==='losing';});
   var live = g.status === 'inprogress';
-  var boxCls = g.status==='scheduled' ? '' : live ? 'live' : (anyWin?'win':allLoss?'loss':'push');
+  var boxCls = g.status==='scheduled' ? '' : live ? (anyWin?'live-win':allLoss?'live-loss':'live') : (anyWin?'win':allLoss?'loss':'push');
   var hs=g.homeScore, as=g.awayScore, tot=hs+as;
   var favS = spreadFav===g.home ? hs : as;
   var margin = favS - (spreadFav===g.home ? as : hs);
@@ -530,7 +530,7 @@ function renderRow(g, ev) {
 
   var bc = {go:'go',sus:'sus',avoid:'avoid'}[status] || 'sus';
   var accId = 'acc-' + g.espnId;
-  var lineTxt = spread ? (spreadFav+' -'+spread+'\nO/U '+total) : 'No odds\nyet';
+  var lineTxt = spread ? (spreadFav+' -'+spread+(total ? '\nO/U '+total : '\nO/U —')) : 'No odds\nyet';
   var probTxt = g.homeWinProb ? (g.home+' win prob: '+Math.round(g.homeWinProb)+'%') : '—';
   var paceDir = ouPick==='OVER' ? '⬆️ Fast pace — lean OVER '+total : '⬇️ Slow pace — lean UNDER '+total;
 
