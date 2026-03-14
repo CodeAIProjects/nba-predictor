@@ -95,7 +95,7 @@ function toESPNDate(dateStr) {
 // ─── 1. ESPN SCOREBOARD ───────────────────────────────────────────────────────
 async function fetchScores(dateStr) {
   const d = toESPNDate(dateStr);
-  const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${d}&limit=20&groups=50`;
+  const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${d}&limit=20`;
   const data = await safeFetch(url);
   if (!data?.events) return [];
 
@@ -1011,7 +1011,7 @@ app.get('/api/dates', async (req, res) => {
   const results = await Promise.all(dates.map(async dateStr => {
     if (cache[dateStr]?.games?.length > 0) return { date: dateStr, count: cache[dateStr].games.length };
     const espnDate = toESPNDate(dateStr);
-    const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${espnDate}&limit=20&groups=50`;
+    const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${espnDate}&limit=20`;
     const data = await safeFetch(url);
     return { date: dateStr, count: data?.events?.length || 0 };
   }));
