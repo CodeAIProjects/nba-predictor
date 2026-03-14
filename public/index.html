@@ -724,34 +724,10 @@ function renderRow(g, ev) {
     '</tr>' +
     '<tr class="acc-row closed" id="'+accId+'"><td colspan="11"><div class="acc-inner">' +
       '<div class="acc-card"><div class="acc-card-title">🩹 Injuries & Impact</div>'+injHtml+'</div>' +
-      '<div class="acc-card"><div class="acc-card-title">🏃 Pace / O·U Lean</div><div class="pace-txt '+(ouPick==='OVER'?'pace-over':'pace-under')+'">'+paceDir+'<br><br>Based on team injury counts and ESPN pace data.</div></div>' +
-      '<div class="acc-card"><div class="acc-card-title">📋 H2H History</div><div class="h2h-txt">📍 Venue: '+(g.venue||'—')+'<br><br>Full H2H ATS history available when BallDontLie API key is configured.</div></div>' +
-      '<div class="acc-card"><div class="acc-card-title">🧠 Pick Analysis</div><div class="why-win">' +
-        picks.map(function(p) {
-          var pu=p.toUpperCase(), isOU=(pu.indexOf('OVER')>=0||pu.indexOf('UNDER')>=0);
-          var r = isOU ? det.ouR : det.spreadR;
-          var tag = r==='win'?'tag-g':r==='loss'?'tag-r':'tag-y';
-          var lbl = r==='win'?'WIN ✅':r==='loss'?'LOSS ❌':r==='winning'?'WINNING 🟢':r==='losing'?'LOSING 🔴':'PENDING ⏳';
-          return '<span class="tag '+tag+'">'+lbl+'</span> '+p+'<br>';
-        }).join('') +
-        (homeOut||awayOut ? '<br><span class="tag tag-r">INJURIES</span> '+homeOut+' home · '+awayOut+' away out' : '') +
-      '</div></div>' +
-      '<div class="acc-card">' +
-        '<div class="acc-card-title">📋 H2H History</div>' +
-        buildH2H(g) +
-      '</div>' +
-      '<div class="acc-card">' +
-        '<div class="acc-card-title">🏃 Pace / O·U Lean</div>' +
-        buildPaceLean(g, ouPick, total) +
-      '</div>' +
-      '<div class="acc-card">' +
-        '<div class="acc-card-title">⬛ Quarter Scores</div>' +
-        (buildQtrScores(g) || '<div style="color:var(--muted);font-size:.72rem">Available after game starts</div>') +
-      '</div>' +
-      '<div class="acc-card" style="flex:2">' +
-        '<div class="acc-card-title">🧠 Model Reasoning</div>' +
-        buildWhyReasoning(g, det, spread, spreadFav, total, ouPick) +
-      '</div>' +
+      '<div class="acc-card"><div class="acc-card-title">📋 H2H History</div>' + buildH2H(g) + '</div>' +
+      '<div class="acc-card"><div class="acc-card-title">🏃 Pace / O·U Lean</div>' + buildPaceLean(g, ouPick, total) + '</div>' +
+      '<div class="acc-card"><div class="acc-card-title">⬛ Quarter Scores</div>' + (buildQtrScores(g) || '<div style="color:var(--muted);font-size:.72rem">Available after game starts</div>') + '</div>' +
+      '<div class="acc-card" style="flex:2"><div class="acc-card-title">🧠 Model Reasoning</div>' + buildWhyReasoning(g, det, spread, spreadFav, total, ouPick) + '</div>' +
     '</div></td></tr>';
 }
 
