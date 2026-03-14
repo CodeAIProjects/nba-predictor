@@ -815,7 +815,9 @@ async function assembleGameData(dateStr) {
 // ─── 6. BACKGROUND POLLER ────────────────────────────────────────────────────
 // Polls today's date every 30s while games are live
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  // NBA schedule is Eastern Time — after midnight UTC but before midnight ET,
+  // the UTC date is already "tomorrow" but no games are scheduled yet.
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 }
 
 // ── PREDICTION MODEL ──────────────────────────────────────────────────────────
@@ -998,9 +1000,9 @@ app.get('/api/data', async (req, res) => {
 // GET /api/dates — returns last 7 + next 7 days with game counts (uses ESPN)
 app.get('/api/dates', async (req, res) => {
   const dates = [];
-  const now = new Date();
+  const todayET = today(); // Eastern Time date string
   for (let i = -4; i <= 4; i++) {
-    const d = new Date(now);
+    const d = new Date(todayET + 'T12:00:00');
     d.setDate(d.getDate() + i);
     dates.push(d.toISOString().slice(0, 10));
   }
