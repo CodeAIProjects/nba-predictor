@@ -121,14 +121,12 @@
   .state-title{font-size:.85rem;letter-spacing:2px;color:var(--text2);margin-bottom:6px}
   .state-sub{font-size:.7rem;color:var(--muted)}
   .loading-ball{font-size:3rem;display:inline-block;animation:spin .9s linear infinite}
-  @keyframes scoreFlip{
-    0%  {transform:scale(1);color:inherit;text-shadow:none}
-    25% {transform:scale(1.45);color:var(--cyan);text-shadow:0 0 12px var(--cyan)}
-    60% {transform:scale(0.95);color:var(--cyan);text-shadow:0 0 8px var(--cyan)}
-    100%{transform:scale(1);color:inherit;text-shadow:none}
-  }
-  .snum{display:inline-block} /* ensure transform works */
-  .score-flip{animation:scoreFlip .55s cubic-bezier(.22,.68,0,1.2) forwards}
+  /* ── Odometer score display ── */
+  .snum{display:inline-flex;gap:1px;align-items:center;font-variant-numeric:tabular-nums}
+  .snum.lead{color:var(--cyan)}
+  .odo-digit{display:inline-block;overflow:hidden;height:1.2em;line-height:1.2em;vertical-align:middle}
+  .odo-reel{display:flex;flex-direction:column;transition:transform .35s cubic-bezier(.22,.68,0,1.1)}
+  .odo-reel span{display:block;height:1.2em;line-height:1.2em;text-align:center}
   @keyframes spin{to{transform:rotate(360deg)}}
   [data-tip]{cursor:help}
   #tt{position:fixed;z-index:9999;background:#0b1629;color:#e2e8f0;font-family:"DM Sans",sans-serif;font-size:.72rem;line-height:1.5;white-space:pre-wrap;max-width:265px;min-width:130px;padding:9px 13px;border-radius:9px;border:1px solid #243654;box-shadow:0 6px 28px rgba(0,0,0,.65);pointer-events:none;opacity:0;transition:opacity .12s}
@@ -335,23 +333,20 @@ function render(data) {
     '<th style="width:56px">MORE</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>';
 
-  // Flip animation on score change for live games
+  // Odometer animation on score change for live games
   games.forEach(function(g) {
     if (g.status !== 'inprogress') return;
-    var prev = scoreCache[g.espnId];
     var curA = parseInt(g.awayScore) || 0;
     var curH = parseInt(g.homeScore) || 0;
+    var prev = scoreCache[g.espnId];
+
     if (prev && (prev.away !== curA || prev.home !== curH)) {
-      var row = document.querySelector('[data-eid="' + g.espnId + '"]');
-      if (row) {
-        row.querySelectorAll('.snum').forEach(function(el) {
-          el.classList.remove('score-flip');
-          void el.offsetWidth;
-          el.classList.add('score-flip');
-          setTimeout(function() { el.classList.remove('score-flip'); }, 550);
-        });
-      }
+      var elA = document.getElementById('odo-' + g.espnId + '-away');
+      var elH = document.getElementById('odo-' + g.espnId + '-home');
+      if (elA && prev.away !== curA) animateOdo(elA, curA);
+      if (elH && prev.home !== curH) animateOdo(elH, curH);
     }
+
     scoreCache[g.espnId] = { away: curA, home: curH };
   });
 
@@ -403,6 +398,37 @@ function evalDetail(g, spreadFav, spread, total, ouPick) {
 function pickIcon(r) { return r==='win'?'✅':r==='winning'?'🟢':r==='loss'?'❌':r==='losing'?'🔴':r==='push'?'➖':'⏳'; }
 function pickColor(r) { return r==='win'||r==='winning'?'var(--green)':r==='loss'||r==='losing'?'var(--red)':r==='push'?'var(--yellow)':'var(--muted)'; }
 
+// Build odometer digit HTML for a score number
+function buildOdo(num) {
+  var s = String(num || 0);
+  return s.split('').map(function(d) {
+    return '<span class="odo-digit"><span class="odo-reel" data-digit="'+d+'" style="transform:translateY(-'+d+'00%)">'+
+      '<span>0</span><span>1</span><span>2</span><span>3</span><span>4</span>'+
+      '<span>5</span><span>6</span><span>7</span><span>8</span><span>9</span>'+
+    '</span></span>';
+  }).join('');
+}
+
+// Animate odometer to new score — only rolls digits that changed
+function animateOdo(el, newScore) {
+  var newStr = String(newScore || 0);
+  var reels  = el.querySelectorAll('.odo-reel');
+
+  // Rebuild if digit count changed
+  if (reels.length !== newStr.length) {
+    el.innerHTML = buildOdo(newScore);
+    return;
+  }
+
+  for (var i = 0; i < reels.length; i++) {
+    var d = newStr[i];
+    if (reels[i].dataset.digit !== d) {
+      reels[i].dataset.digit = d;
+      reels[i].style.transform = 'translateY(-' + d + '00%)';
+    }
+  }
+}
+
 function renderRow(g, ev) {
   var picks=ev.picks, spreadFav=ev.spreadFav, spread=ev.spread, total=ev.total, ouPick=ev.ouPick;
   var status=ev.status, stxt=ev.stxt, conf=ev.conf, clbl=ev.clbl, det=ev.det, homeOut=ev.homeOut, awayOut=ev.awayOut;
@@ -442,7 +468,7 @@ function renderRow(g, ev) {
   if (g.status !== 'scheduled') {
     scoreBox = '<div class="score-box '+boxCls+'"><div class="score-teams">' +
       '<div class="team-side"><img class="team-logo" src="'+g.awayLogo+'" onerror="this.style.display=\'none\'"/><span class="team-abbr">'+g.away+'</span></div>' +
-      '<span class="snum '+(aLead?'lead':'')+'">'+as+'</span><span class="svs">—</span><span class="snum '+(hLead?'lead':'')+'">'+hs+'</span>' +
+      '<span class="snum '+(aLead?'lead':'')+'" data-score="'+as+'" id="odo-'+g.espnId+'-away">'+buildOdo(as)+'</span><span class="svs">—</span><span class="snum '+(hLead?'lead':'')+'" data-score="'+hs+'" id="odo-'+g.espnId+'-home">'+buildOdo(hs)+'</span>' +
       '<div class="team-side home"><span class="team-abbr">'+g.home+'</span><img class="team-logo" src="'+g.homeLogo+'" onerror="this.style.display=\'none\'"/></div>' +
       '</div>'+stag+'<div class="sb-picks">'+pickLines+'</div></div>';
   } else {
