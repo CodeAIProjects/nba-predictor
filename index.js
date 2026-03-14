@@ -385,6 +385,56 @@ const ESPN_TEAM_IDS = {
   POR:'22',SAC:'23',SAS:'24',TOR:'28',UTA:'26',WAS:'27'
 };
 
+// ─── 1d. STREAK DATA (ESPN standings API) ────────────────────────────────────
+const streakCache = { data: null, fetchedAt: 0 };
+const STREAK_TTL  = 30 * 60 * 1000; // 30 min
+
+async function fetchStreaks() {
+  if (streakCache.data && Date.now() - streakCache.fetchedAt < STREAK_TTL) return streakCache.data;
+
+  // ESPN standings endpoint — returns current, home, road streaks per team
+  const url = 'https://site.api.espn.com/apis/v2/sports/basketball/nba/standings?season=2025&seasontype=2&type=0';
+  const data = await safeFetch(url);
+  if (!data) return null;
+
+  const streaks = {}; // { "LAL": { current: "W3", home: "W2", away: "L1" } }
+
+  // ESPN returns children (conferences) → standings entries
+  const groups = data.children || [];
+  for (const conf of groups) {
+    for (const div of (conf.children || [])) {
+      for (const entry of (div.standings?.entries || conf.standings?.entries || [])) {
+        const abbr = entry.team?.abbreviation;
+        if (!abbr) continue;
+
+        // Normalize abbr to our format
+        const NORM = { GS:'GSW', SA:'SAS', NO:'NOP', NY:'NYK', WSH:'WAS', UTAH:'UTA' };
+        const ourAbbr = NORM[abbr] || abbr;
+
+        // Extract streak stats from stats array
+        const stats = entry.stats || [];
+        const getStat = name => stats.find(s => s.name === name || s.abbreviation === name);
+
+        const curStreak  = getStat('currentStreak')  || getStat('streak');
+        const homeStreak = getStat('homeStreak')      || getStat('homeRecord');
+        const awayStreak = getStat('awayStreak')      || getStat('awayRecord');
+
+        streaks[ourAbbr] = {
+          current: curStreak?.displayValue  || curStreak?.value  || null,
+          home:    homeStreak?.displayValue || null,
+          away:    awayStreak?.displayValue || null,
+          raw:     stats.map(s => ({ name: s.name, abbr: s.abbreviation, val: s.displayValue })),
+        };
+      }
+    }
+  }
+
+  streakCache.data     = streaks;
+  streakCache.fetchedAt = Date.now();
+  console.log('[streaks] loaded for', Object.keys(streaks).length, 'teams');
+  return streaks;
+}
+
 // BallDontLie player stats cache { "SEASON": { playerId: { pts, ... } } }
 const statsCache = {};
 
@@ -633,14 +683,17 @@ async function assembleGameData(dateStr) {
   // Fetch injuries + season stats in parallel
   const injuryMap  = {};
   const seasonStats = {};
-  await Promise.all(teams.map(async t => {
-    const [inj, stats] = await Promise.all([
-      getCachedInjuries(t),
-      fetchTeamSeasonStats(t),
-    ]);
-    injuryMap[t]  = inj;
-    seasonStats[t] = stats;
-  }));
+  const [, allStreaks] = await Promise.all([
+    Promise.all(teams.map(async t => {
+      const [inj, stats] = await Promise.all([
+        getCachedInjuries(t),
+        fetchTeamSeasonStats(t),
+      ]);
+      injuryMap[t]  = inj;
+      seasonStats[t] = stats;
+    })),
+    fetchStreaks(),
+  ]);
 
   // Fetch summaries for all games in parallel (PPG, odds, H2H, quarters, leaders)
   const summaries = await Promise.all(
@@ -699,6 +752,11 @@ async function assembleGameData(dateStr) {
       seasonStats: {
         [game.home]: seasonStats[game.home] || null,
         [game.away]: seasonStats[game.away] || null,
+      },
+      // Streaks from ESPN standings
+      streaks: {
+        [game.home]: allStreaks ? allStreaks[game.home] : null,
+        [game.away]: allStreaks ? allStreaks[game.away] : null,
       },
       // B2B detection: did the team play yesterday?
       b2b: (() => {
@@ -928,6 +986,13 @@ app.get('/api/debug/odds', async (req, res) => {
 });
 
 // Debug endpoint — test BDL PPG lookup for a player name
+app.get('/api/debug/streaks', async (req, res) => {
+  streakCache.fetchedAt = 0; // force refresh
+  const streaks = await fetchStreaks();
+  const sample  = req.query.team ? streaks?.[req.query.team.toUpperCase()] : null;
+  res.json({ total: Object.keys(streaks || {}).length, sample: sample || streaks });
+});
+
 app.get('/api/debug/teamstats', async (req, res) => {
   const abbr = (req.query.team || 'LAL').toUpperCase();
   delete teamStatsCache[abbr];
