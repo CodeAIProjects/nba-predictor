@@ -121,8 +121,14 @@
   .state-title{font-size:.85rem;letter-spacing:2px;color:var(--text2);margin-bottom:6px}
   .state-sub{font-size:.7rem;color:var(--muted)}
   .loading-ball{font-size:3rem;display:inline-block;animation:spin .9s linear infinite}
-  @keyframes scoreFlip{0%{transform:rotateX(0deg);color:inherit}30%{transform:rotateX(90deg);color:var(--cyan)}60%{transform:rotateX(-15deg);color:var(--cyan)}100%{transform:rotateX(0deg);color:inherit}}
-  .score-flip{animation:scoreFlip .5s ease forwards;display:inline-block;transform-origin:center}
+  @keyframes scoreFlip{
+    0%  {transform:scale(1);color:inherit;text-shadow:none}
+    25% {transform:scale(1.45);color:var(--cyan);text-shadow:0 0 12px var(--cyan)}
+    60% {transform:scale(0.95);color:var(--cyan);text-shadow:0 0 8px var(--cyan)}
+    100%{transform:scale(1);color:inherit;text-shadow:none}
+  }
+  .snum{display:inline-block} /* ensure transform works */
+  .score-flip{animation:scoreFlip .55s cubic-bezier(.22,.68,0,1.2) forwards}
   @keyframes spin{to{transform:rotate(360deg)}}
   [data-tip]{cursor:help}
   #tt{position:fixed;z-index:9999;background:#0b1629;color:#e2e8f0;font-family:"DM Sans",sans-serif;font-size:.72rem;line-height:1.5;white-space:pre-wrap;max-width:265px;min-width:130px;padding:9px 13px;border-radius:9px;border:1px solid #243654;box-shadow:0 6px 28px rgba(0,0,0,.65);pointer-events:none;opacity:0;transition:opacity .12s}
