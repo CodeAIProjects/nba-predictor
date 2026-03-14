@@ -155,6 +155,15 @@
   .odo-col b{display:block;font-style:normal;font-weight:inherit;margin-top:0;transition:margin-top .7s cubic-bezier(.4,0,.2,1)}
   .odo-col b span{display:block;height:1.25em;line-height:1.25em;text-align:center;min-width:.65em}
   .odo-col b.blur{filter:blur(2px)}
+  /* Score zoom+glow on change */
+  @keyframes scoreZoom{
+    0%  {transform:scale(1);filter:none}
+    20% {transform:scale(1.45);filter:drop-shadow(0 0 14px #38bdf8) brightness(1.4)}
+    55% {transform:scale(1.2);filter:drop-shadow(0 0 6px #38bdf8)}
+    100%{transform:scale(1);filter:none}
+  }
+  .score-wrap{display:inline-flex;transform-origin:center}
+  .score-zooming{animation:scoreZoom .55s cubic-bezier(.22,.68,0,1.2) forwards}
   @keyframes spin{to{transform:rotate(360deg)}}
   [data-tip]{cursor:help}
   #tt{position:fixed;z-index:9999;background:#0b1629;color:#e2e8f0;font-family:"DM Sans",sans-serif;font-size:.72rem;line-height:1.5;white-space:pre-wrap;max-width:265px;min-width:130px;padding:9px 13px;border-radius:9px;border:1px solid #243654;box-shadow:0 6px 28px rgba(0,0,0,.65);pointer-events:none;opacity:0;transition:opacity .12s}
@@ -383,8 +392,8 @@ function render(data) {
     // Step 2: after initOdo's double-rAF has painted, animate to current score
     if (prev && (prev.away !== curA || prev.home !== curH)) {
       requestAnimationFrame(function() { requestAnimationFrame(function() { requestAnimationFrame(function() {
-        if (elA && prev.away !== curA) animOdo(elA, curA);
-        if (elH && prev.home !== curH) animOdo(elH, curH);
+        if (elA && prev.away !== curA) { animOdo(elA, curA); triggerZoom(elA); }
+        if (elH && prev.home !== curH) { animOdo(elH, curH); triggerZoom(elH); }
       }); }); });
     }
 
@@ -699,15 +708,20 @@ function buildOdo(num) {
   }).join('') + '</div>';
 }
 
+function getOdoEl(el) {
+  return el.querySelector('.score-wrap') || el;
+}
+
 function initOdo(el, num) {
-  el.innerHTML = buildOdo(num);
+  var target = getOdoEl(el);
+  target.innerHTML = buildOdo(num);
   requestAnimationFrame(function() { requestAnimationFrame(function() {
-    var span = el.querySelector('.odo-col b span');
+    var span = target.querySelector('.odo-col b span');
     if (!span) return;
     var h = span.offsetHeight || span.getBoundingClientRect().height;
-    if (!h) return; // not in DOM yet
-    el.querySelectorAll('.odo-col').forEach(function(c) { c.style.height = h + 'px'; });
-    el.querySelectorAll('b').forEach(function(b) {
+    if (!h) return;
+    target.querySelectorAll('.odo-col').forEach(function(c) { c.style.height = h + 'px'; });
+    target.querySelectorAll('b').forEach(function(b) {
       b.style.transition = 'none';
       b.style.marginTop  = (parseInt(b.dataset.value) * -h) + 'px';
     });
@@ -715,14 +729,15 @@ function initOdo(el, num) {
 }
 
 function animOdo(el, num) {
+  var target = getOdoEl(el);
   var s  = String(num || 0);
-  var bs = el.querySelectorAll('b');
+  var bs = target.querySelectorAll('b');
   if (bs.length !== s.length) { initOdo(el, num); return; }
-  var span = el.querySelector('.odo-col b span');
+  var span = target.querySelector('.odo-col b span');
   if (!span) return;
   var h = span.offsetHeight || span.getBoundingClientRect().height;
   if (!h) return;
-  el.querySelectorAll('.odo-col').forEach(function(c) { c.style.height = h + 'px'; });
+  target.querySelectorAll('.odo-col').forEach(function(c) { c.style.height = h + 'px'; });
   bs.forEach(function(b, i) {
     var newD = parseInt(s[i]);
     var oldD = parseInt(b.dataset.value);
@@ -736,6 +751,14 @@ function animOdo(el, num) {
       }
     }
   });
+}
+
+function triggerZoom(el) {
+  var wrap = el.querySelector('.score-wrap') || el;
+  wrap.classList.remove('score-zooming');
+  void wrap.offsetWidth;
+  wrap.classList.add('score-zooming');
+  setTimeout(function() { wrap.classList.remove('score-zooming'); }, 600);
 }
 
 
@@ -778,7 +801,7 @@ function renderRow(g, ev) {
   if (g.status !== 'scheduled') {
     scoreBox = '<div class="score-box '+boxCls+'"><div class="score-teams">' +
       '<div class="team-side"><img class="team-logo" src="'+g.awayLogo+'" onerror="this.style.display=\'none\'"/><span class="team-abbr">'+g.away+'</span></div>' +
-      '<span class="snum '+(aLead?'lead':'')+'" data-score="'+as+'" id="odo-'+g.espnId+'-away">'+buildOdo(as)+'</span><span class="svs">—</span><span class="snum '+(hLead?'lead':'')+'" data-score="'+hs+'" id="odo-'+g.espnId+'-home">'+buildOdo(hs)+'</span>' +
+      '<span class="snum '+(aLead?'lead':'')+'" id="odo-'+g.espnId+'-away"><div class="score-wrap">'+buildOdo(as)+'</div></span><span class="svs">—</span><span class="snum '+(hLead?'lead':'')+'" id="odo-'+g.espnId+'-home"><div class="score-wrap">'+buildOdo(hs)+'</div></span>' +
       '<div class="team-side home"><span class="team-abbr">'+g.home+'</span><img class="team-logo" src="'+g.homeLogo+'" onerror="this.style.display=\'none\'"/></div>' +
       '</div>'+stag+'<div class="sb-picks">'+pickLines+'</div></div>';
   } else {
