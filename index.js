@@ -132,6 +132,8 @@ async function fetchScores(dateStr) {
 
 // ─── 1b. ESPN GAME SUMMARY (boxscore, odds, leaders, H2H, win prob, PPG) ──────
 const summaryCache = {}; // { espnId: { data, fetchedAt } }
+// Force clear on each deploy by using module load time
+const CACHE_BOOT_TIME = Date.now();
 const SUMMARY_TTL_LIVE   = 10  * 1000;  // 10s when live
 const SUMMARY_TTL_CLOSED = 60 * 60 * 1000; // 1h when final (allows re-parse)
 
@@ -812,6 +814,44 @@ app.get('/api/debug/odds', async (req, res) => {
 });
 
 // Debug endpoint — test BDL PPG lookup for a player name
+app.get('/api/debug/last5raw', async (req, res) => {
+  // Force-fetch a specific game summary and parse lastFive with new logic
+  const gameId = req.query.id || '401810824';
+  const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${gameId}`;
+  const data = await safeFetch(url);
+  if (!data) return res.json({ error: 'fetch failed' });
+
+  const l5raw = data.lastFiveGames || [];
+  const result = l5raw.map(teamL5 => {
+    const abbr   = teamL5.team?.abbreviation;
+    const events = teamL5.events || [];
+    const firstEv = events[0];
+    const parsed = events.map(e => {
+      const isHome = (e.atVs||'').trim() === 'vs';
+      const scored   = parseFloat(isHome ? e.homeTeamScore : e.awayTeamScore) || 0;
+      const conceded = parseFloat(isHome ? e.awayTeamScore : e.homeTeamScore) || 0;
+      return { atVs: e.atVs, scored, conceded, result: e.gameResult };
+    }).filter(e => e.scored > 0);
+
+    const homeG = parsed.filter(e => e.atVs.trim() === 'vs');
+    const awayG = parsed.filter(e => e.atVs.trim() === '@');
+    const avg = (arr, k) => arr.length ? (arr.reduce((a,e)=>a+e[k],0)/arr.length).toFixed(1) : null;
+
+    return {
+      abbr,
+      parsedCount: parsed.length,
+      homeGames: homeG.length,
+      awayGames: awayG.length,
+      home: { scored: avg(homeG,'scored'), conceded: avg(homeG,'conceded') },
+      away: { scored: avg(awayG,'scored'), conceded: avg(awayG,'conceded') },
+      all:  { scored: avg(parsed,'scored'), conceded: avg(parsed,'conceded') },
+      rawParsed: parsed,
+    };
+  });
+
+  res.json({ gameId, teams: result });
+});
+
 app.get('/api/debug/last5', async (req, res) => {
   const ds = req.query.date || today();
   const games = await fetchScores(ds);
