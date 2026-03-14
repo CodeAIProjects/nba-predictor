@@ -80,6 +80,7 @@
   .sl{color:var(--muted);font-size:.6rem;font-family:"DM Mono",monospace;margin-bottom:1px}
   .sv{color:var(--cyan);font-size:.78rem;font-weight:500}
   .line-val{color:var(--orange);font-weight:700;font-size:.82rem;white-space:pre-line}
+  .line-src{font-size:.58rem;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:.5px;margin-top:2px;display:block}
   .badge{display:inline-flex;align-items:center;justify-content:center;padding:4px 8px;border-radius:6px;font-size:.88rem;line-height:1;white-space:nowrap}
   .badge.go{background:var(--green-bg);border:1px solid var(--green);color:var(--green)}
   .badge.sus{background:var(--yellow-bg);border:1px solid var(--yellow);color:var(--yellow)}
@@ -866,7 +867,9 @@ function renderRow(g, ev) {
 
   var bc = {go:'go',sus:'sus',avoid:'avoid'}[status] || 'sus';
   var accId = 'acc-' + g.espnId;
-  var lineTxt = spread ? (spreadFav+' -'+spread+(total ? '\nO/U '+total : '\nO/U —')) : 'No odds\nyet';
+  var oddsSource = g.odds && g.odds.source ? g.odds.source : null;
+  var sourceLbl = oddsSource === 'oddsapi' ? 'DraftKings' : oddsSource === 'espn' ? 'ESPN' : null;
+  var lineTxt = spread ? (spreadFav+' -'+spread+(total ? '\nO/U '+total : '\nO/U —')+(sourceLbl ? '\n'+sourceLbl : '')) : 'No odds\nyet';
   var probTxt = g.homeWinProb ? (g.home+' win prob: '+Math.round(g.homeWinProb)+'%') : '—';
   var paceDir = ouPick==='OVER' ? '⬆️ Fast pace — lean OVER '+total : '⬇️ Slow pace — lean UNDER '+total;
 
@@ -886,7 +889,7 @@ function renderRow(g, ev) {
     '<td>'+seasonAvgCell+'</td>' +
     '<td>'+l3AvgCell+'</td>' +
     '<td>'+totalAvgCell+'</td>' +
-    '<td><div class="line-val" style="white-space:pre-line">'+lineTxt+'</div></td>' +
+    '<td><div class="line-val" style="white-space:pre-line">'+(spread ? spreadFav+' -'+spread+(total ? '\nO/U '+total : '\nO/U —') : 'No odds\nyet')+'</div>'+(sourceLbl ? '<span class="line-src">via '+sourceLbl+'</span>' : '')+'</td>' +
     (function(){
       var hB2B = g.b2b && g.b2b.home;
       var aB2B = g.b2b && g.b2b.away;
