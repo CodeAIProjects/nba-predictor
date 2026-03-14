@@ -229,38 +229,54 @@
 <footer>
   <div class="legend">
     <div class="legend-group">
-      <div class="legend-title">🎨 Box Colors</div>
-      <div class="legend-row"><span class="legend-sym" style="color:var(--green)">■</span><div class="legend-desc"><strong>Green</strong> — Any pick winning/won</div></div>
-      <div class="legend-row"><span class="legend-sym" style="color:var(--red)">■</span><div class="legend-desc"><strong>Red</strong> — All picks losing/lost</div></div>
-      <div class="legend-row"><span class="legend-sym" style="color:var(--cyan)">■</span><div class="legend-desc"><strong>Cyan pulse</strong> — Live, on the line</div></div>
-      <div class="legend-row"><span class="legend-sym" style="color:var(--yellow)">■</span><div class="legend-desc"><strong>Yellow</strong> — Push (exact line)</div></div>
+      <div class="legend-title">🎨 Game Box Colors</div>
+      <div class="legend-row"><span class="legend-sym" style="color:var(--green)">■</span><div class="legend-desc"><strong>Green pulse</strong> — Live &amp; your pick is winning</div></div>
+      <div class="legend-row"><span class="legend-sym" style="color:var(--red)">■</span><div class="legend-desc"><strong>Red pulse</strong> — Live &amp; your pick is losing</div></div>
+      <div class="legend-row"><span class="legend-sym" style="color:var(--cyan)">■</span><div class="legend-desc"><strong>Cyan pulse</strong> — Live, too close to call</div></div>
+      <div class="legend-row"><span class="legend-sym" style="color:var(--green);opacity:.5">■</span><div class="legend-desc"><strong>Green</strong> — Final, pick won</div></div>
+      <div class="legend-row"><span class="legend-sym" style="color:var(--red);opacity:.5">■</span><div class="legend-desc"><strong>Red</strong> — Final, pick lost</div></div>
     </div>
     <div class="legend-group">
-      <div class="legend-title">🏆 Pick Icons</div>
-      <div class="legend-row"><span class="legend-sym">✅</span><div class="legend-desc"><strong>Final Win</strong> — Covered at whistle</div></div>
-      <div class="legend-row"><span class="legend-sym">❌</span><div class="legend-desc"><strong>Final Loss</strong> — Did not cover</div></div>
-      <div class="legend-row"><span class="legend-sym">🟢</span><div class="legend-desc"><strong>Winning ▲</strong> — Currently covering</div></div>
-      <div class="legend-row"><span class="legend-sym">🔴</span><div class="legend-desc"><strong>Losing ▼</strong> — Not covering yet</div></div>
-      <div class="legend-row"><span class="legend-sym">⏳</span><div class="legend-desc"><strong>Pending</strong> — Game not started</div></div>
+      <div class="legend-title">🏆 Pick Result Icons</div>
+      <div class="legend-row"><span class="legend-sym">✅</span><div class="legend-desc"><strong>Win</strong> — Pick covered at final whistle</div></div>
+      <div class="legend-row"><span class="legend-sym">❌</span><div class="legend-desc"><strong>Loss</strong> — Pick did not cover</div></div>
+      <div class="legend-row"><span class="legend-sym">➖</span><div class="legend-desc"><strong>Push</strong> — Exact line hit, money returned</div></div>
+      <div class="legend-row"><span class="legend-sym">🟢</span><div class="legend-desc"><strong>Winning ▲</strong> — Currently covering (live)</div></div>
+      <div class="legend-row"><span class="legend-sym">🔴</span><div class="legend-desc"><strong>Losing ▼</strong> — Not covering yet (live)</div></div>
+      <div class="legend-row"><span class="legend-sym">⏳</span><div class="legend-desc"><strong>Pending</strong> — Game not yet started</div></div>
     </div>
     <div class="legend-group">
-      <div class="legend-title">🚦 Difficulty</div>
-      <div class="legend-row"><span class="legend-sym">✅</span><div class="legend-desc"><strong>Easy</strong> — All signals aligned</div></div>
-      <div class="legend-row"><span class="legend-sym">⚠️</span><div class="legend-desc"><strong>Moderate</strong> — Some uncertainty</div></div>
-      <div class="legend-row"><span class="legend-sym">🚫</span><div class="legend-desc"><strong>Hard</strong> — Too risky, avoid</div></div>
+      <div class="legend-title">📊 Column Guide</div>
+      <div class="legend-row"><span class="legend-sym" style="font-size:.6rem;color:var(--green)">sc</span><div class="legend-desc"><strong>Seasonal Avg</strong> — Home team home game avg / Away team away game avg (scored / conceded)</div></div>
+      <div class="legend-row"><span class="legend-sym" style="font-size:.6rem;color:var(--cyan)">L5</span><div class="legend-desc"><strong>Last 5 Avg</strong> — Same splits but last 5 games only. More weight = recent form</div></div>
+      <div class="legend-row"><span class="legend-sym" style="font-size:.55rem;color:var(--purple)">O/U</span><div class="legend-desc"><strong>O/U Analysis</strong> — Cross-checks: home offense vs away defense &amp; vice versa. Season (1x) + L5 (1.5x) weighted</div></div>
+      <div class="legend-row"><span class="legend-sym" style="color:var(--orange)">$</span><div class="legend-desc"><strong>Market Line</strong> — Spread favourite &amp; O/U total from DraftKings or ESPN</div></div>
+      <div class="legend-row"><span class="legend-sym">🔄</span><div class="legend-desc"><strong>B2B</strong> — Team played yesterday. B2B teams cover ~40% of the time</div></div>
+      <div class="legend-row"><span class="legend-sym">⭐</span><div class="legend-desc"><strong>Confidence</strong> — ⭐⭐⭐⭐ Strong · ⭐⭐⭐ Standard · ⭐⭐ Lean only</div></div>
     </div>
     <div class="legend-group">
-      <div class="legend-title">📂 Accordion (▼ button)</div>
-      <div class="legend-row"><span class="legend-sym">🩹</span><div class="legend-desc"><strong>Injuries</strong> — OUT/Q players listed</div></div>
-      <div class="legend-row"><span class="legend-sym">🏃</span><div class="legend-desc"><strong>Pace</strong> — O/U lean direction</div></div>
-      <div class="legend-row"><span class="legend-sym">📋</span><div class="legend-desc"><strong>H2H</strong> — Head-to-head history</div></div>
-      <div class="legend-row"><span class="legend-sym">🧠</span><div class="legend-desc"><strong>Analysis</strong> — Why pick won/lost</div></div>
+      <div class="legend-title">📂 Accordion Panels</div>
+      <div class="legend-row"><span class="legend-sym">🩹</span><div class="legend-desc"><strong>Injuries</strong> — Confirmed OUT &amp; questionable players with PPG and % of team scoring</div></div>
+      <div class="legend-row"><span class="legend-sym">📋</span><div class="legend-desc"><strong>H2H History</strong> — Season series wins from ESPN summary</div></div>
+      <div class="legend-row"><span class="legend-sym">🏃</span><div class="legend-desc"><strong>Pace / O·U</strong> — Full cross-check analysis with injury overlay and L5 confirmation</div></div>
+      <div class="legend-row"><span class="legend-sym">⬛</span><div class="legend-desc"><strong>Quarter Scores</strong> — Q1/Q2/Q3/Q4 breakdown (available after game starts)</div></div>
+      <div class="legend-row"><span class="legend-sym">🧠</span><div class="legend-desc"><strong>Reasoning</strong> — Spread &amp; O/U result with game leaders and injury context</div></div>
+    </div>
+    <div class="legend-group">
+      <div class="legend-title">📈 O/U Analysis Guide</div>
+      <div class="legend-row"><span class="legend-sym" style="color:var(--green)">+</span><div class="legend-desc"><strong>Positive edge</strong> — Offense scores more than opponent allows → Over pressure</div></div>
+      <div class="legend-row"><span class="legend-sym" style="color:var(--red)">−</span><div class="legend-desc"><strong>Negative edge</strong> — Defense holds → Under pressure</div></div>
+      <div class="legend-row"><span class="legend-sym">🔥🔥🔥</span><div class="legend-desc"><strong>All 4 signals agree</strong> + large edge magnitude</div></div>
+      <div class="legend-row"><span class="legend-sym">🔥🔥</span><div class="legend-desc"><strong>All 4 agree</strong> — strong lean</div></div>
+      <div class="legend-row"><span class="legend-sym">🔥</span><div class="legend-desc"><strong>3 of 4 agree</strong> — moderate lean</div></div>
+      <div class="legend-row"><span class="legend-sym">⚠️</span><div class="legend-desc"><strong>Split signals</strong> — conflicting data, proceed with caution</div></div>
     </div>
     <div class="legend-group">
       <div class="legend-title">💰 Betting Basics</div>
-      <div class="legend-row"><span class="legend-sym" style="color:var(--orange)">±</span><div class="legend-desc"><strong>Spread</strong> — Fav must win by more than X</div></div>
-      <div class="legend-row"><span class="legend-sym" style="font-size:.6rem;color:var(--cyan)">O/U</span><div class="legend-desc"><strong>Total</strong> — Combined score vs line</div></div>
-      <div class="legend-row"><span class="legend-sym" style="font-size:.6rem;color:var(--green)">(±)</span><div class="legend-desc"><strong>Badge</strong> — Actual vs line diff</div></div>
+      <div class="legend-row"><span class="legend-sym" style="color:var(--orange)">−X</span><div class="legend-desc"><strong>Spread</strong> — Favourite must win by more than X to cover</div></div>
+      <div class="legend-row"><span class="legend-sym" style="font-size:.6rem;color:var(--cyan)">O/U</span><div class="legend-desc"><strong>Over/Under</strong> — Combined score of both teams vs the line</div></div>
+      <div class="legend-row"><span class="legend-sym" style="font-size:.6rem;color:var(--green)">(+X)</span><div class="legend-desc"><strong>Score badge</strong> — How much pick beat/missed the line by</div></div>
+      <div class="legend-row"><span class="legend-sym" style="font-size:.6rem;color:var(--purple)">prob</span><div class="legend-desc"><strong>Win prob</strong> — ESPN live win probability percentage</div></div>
     </div>
   </div>
   <div class="legend-foot">NBA Predictor v3.0 · Live: ESPN + The Odds API + BallDontLie · Auto-refreshes every 10s live / 30s idle · For informational purposes only</div>
@@ -393,17 +409,17 @@ function render(data) {
   var rows = games.map(function(g, i) { return renderRow(g, evs[i]); }).join('');
   wrap.innerHTML = '<table>' +
     '<thead><tr>' +
-    '<th>GAME / RESULT</th>' +
-    '<th>SEASONAL AVG<br>Home / Away</th>' +
-    '<th>LAST 3 AVG<br>Home / Away</th>' +
-    '<th>O/U ANALYSIS</th>' +
-    '<th>MARKET LINE<br>Spread · O/U</th>' +
-    '<th>B2B</th>' +
-    '<th>LINE MOVE<br>SHARP?</th>' +
-    '<th>DIFFICULTY</th>' +
-    '<th>CONF</th>' +
-    '<th>KEY PICKS</th>' +
-    '<th style="width:52px">MORE</th>' +
+    '<th data-tip="Game score with team logos. Box color shows pick status. Click any row to expand analysis.">GAME / RESULT</th>' +
+    '<th data-tip="Home team HOME game averages / Away team AWAY game averages this season.&#10;Green = scored, Red = conceded.&#10;Used for O/U cross-check analysis.">SEASONAL AVG<br>Home / Away</th>' +
+    '<th data-tip="Same as Seasonal Avg but last 5 games only.&#10;More predictive than full season — captures current form and fatigue.&#10;Weighted 1.5x in O/U analysis.">LAST 5 AVG<br>Home / Away</th>' +
+    '<th data-tip="Cross-check analysis:&#10;Home offense vs Away defense&#10;Away offense vs Home defense&#10;Season (1x) + L5 (1.5x) weighted.&#10;🔥🔥🔥 = all 4 signals agree with big edge">O/U ANALYSIS</th>' +
+    '<th data-tip="Spread = favourite must win by more than this number.&#10;O/U = combined score line.&#10;Source: DraftKings (Odds API) or ESPN fallback.">MARKET LINE<br>Spread · O/U</th>' +
+    '<th data-tip="Back-to-back game flag.&#10;Teams on B2B played yesterday.&#10;B2B teams cover only ~40% of the time — factor into confidence.">B2B</th>' +
+    '<th data-tip="Sharp money / line movement.&#10;Shows current line direction.&#10;Large spread = possible sharp action.">LINE MOVE</th>' +
+    '<th data-tip="Overall difficulty rating based on injuries + B2B fatigue.&#10;✅ Clean · ⚠️ Verify first · 🚫 Avoid">DIFFICULTY</th>' +
+    '<th data-tip="Model confidence in this pick.&#10;⭐⭐⭐⭐ Strong · ⭐⭐⭐ Standard · ⭐⭐ Lean only&#10;Factors in spread size, injuries, B2B.">CONF</th>' +
+    '<th data-tip="Model picks with live result tracking.&#10;Score badge shows actual vs line difference.&#10;WIN PROB from ESPN live win probability.">KEY PICKS</th>' +
+    '<th style="width:52px" data-tip="Click to expand 5 analysis panels:&#10;🩹 Injuries · 📋 H2H · 🏃 Pace/O·U&#10;⬛ Quarter Scores · 🧠 Reasoning">MORE</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>';
 
   // Odometer: DOM rebuilds every poll via innerHTML.
@@ -1048,7 +1064,21 @@ function toggleAcc(id) {
   }
   document.addEventListener('mouseover', function(e) {
     var el = e.target.closest('[data-tip]');
-    if (el && el !== cur) { cur=el; clearTimeout(tid); tid=setTimeout(function(){ tt.innerHTML='<div class="tt-text">'+el.getAttribute('data-tip').split('\n').join('<br>')+'</div>'; tt.classList.add('show'); pos(e.clientX,e.clientY); }, 80); }
+    if (el && el !== cur) {
+        cur=el; clearTimeout(tid);
+        tid=setTimeout(function(){
+          var raw = el.getAttribute('data-tip') || '';
+          // Support both \n and &#10; as line breaks
+          var html = raw.replace(/&#10;/g,'\n').split('\n').map(function(line,i){
+            return i===0
+              ? '<div class="tt-title">'+line+'</div>'
+              : '<div class="tt-row">'+line+'</div>';
+          }).join('');
+          tt.innerHTML = html;
+          tt.classList.add('show');
+          pos(e.clientX, e.clientY);
+        }, 80);
+      }
     else if (!el) { clearTimeout(tid); cur=null; tt.classList.remove('show'); }
   });
   document.addEventListener('mousemove', function(e){ if(cur) pos(e.clientX,e.clientY); });
