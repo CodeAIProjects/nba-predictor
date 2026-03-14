@@ -93,16 +93,26 @@ async function fetchScores(dateStr) {
     const rawAway = ESPN_ABBR[away?.team?.displayName] || away?.team?.abbreviation || '???';
     const homeAbbr = ABBR_FIX[rawHome] || rawHome;
     const awayAbbr = ABBR_FIX[rawAway] || rawAway;
-    const status   = ev.status?.type?.name; // 'STATUS_SCHEDULED' | 'STATUS_IN_PROGRESS' | 'STATUS_FINAL'
+    const status   = ev.status?.type?.name;
+    const statusState = ev.status?.type?.state || ''; // 'pre'|'in'|'post'
     const period   = ev.status?.period || 0;
-    const clock    = ev.status?.displayClock || '';
+    const rawClock = ev.status?.displayClock || '';
+    const clock    = status === 'STATUS_HALFTIME'   ? 'HALF'
+                   : status === 'STATUS_END_PERIOD' ? 'END Q'+period
+                   : status === 'STATUS_OVERTIME'   ? 'OT'
+                   : rawClock;
 
     return {
       id:          ev.id,
       espnId:      ev.id,
       startTime:   ev.date,
-      status:      status === 'STATUS_FINAL' ? 'closed'
-                 : status === 'STATUS_IN_PROGRESS' ? 'inprogress'
+      status:      status === 'STATUS_FINAL'      ? 'closed'
+                 : status === 'STATUS_POSTPONED'  ? 'postponed'
+                 : (status === 'STATUS_IN_PROGRESS' ||
+                    status === 'STATUS_HALFTIME'    ||
+                    status === 'STATUS_END_PERIOD'  ||
+                    status === 'STATUS_DELAYED'     ||
+                    status === 'STATUS_OVERTIME') ? 'inprogress'
                  : 'scheduled',
       period,
       clock,
