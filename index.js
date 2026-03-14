@@ -120,6 +120,127 @@ async function fetchScores(dateStr) {
   });
 }
 
+// ─── 1b. ESPN GAME SUMMARY (boxscore, odds, leaders, H2H, win prob, PPG) ──────
+const summaryCache = {}; // { espnId: { data, fetchedAt } }
+const SUMMARY_TTL_LIVE   = 10  * 1000;  // 10s when live
+const SUMMARY_TTL_CLOSED = 24 * 60 * 60 * 1000; // 24h when final
+
+async function fetchGameSummary(espnId, status) {
+  const c = summaryCache[espnId];
+  const ttl = status === 'closed' ? SUMMARY_TTL_CLOSED : SUMMARY_TTL_LIVE;
+  if (c && Date.now() - c.fetchedAt < ttl) return c.data;
+
+  const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${espnId}`;
+  const raw = await safeFetch(url);
+  if (!raw) return null;
+
+  // ── PARSE BOXSCORE PLAYER STATS → PPG map ─────────────────────────────────
+  const ppgMap = {}; // { "LeBron James": 23.1 }
+  const qtrScores = { home: [], away: [] }; // quarter-by-quarter
+
+  const bsPlayers = raw.boxscore?.players || [];
+  for (const teamBlock of bsPlayers) {
+    const stats = teamBlock.statistics?.[0];
+    if (!stats) continue;
+    const names  = stats.names   || [];
+    const labels = stats.labels  || [];
+    // Find avgPoints column index
+    const ptIdx = names.indexOf('avgPoints') !== -1
+      ? names.indexOf('avgPoints')
+      : labels.indexOf('AVG') !== -1 ? labels.indexOf('AVG') : -1;
+    if (ptIdx < 0) continue;
+    for (const ath of (stats.athletes || [])) {
+      const name = ath.athlete?.displayName;
+      const pts  = parseFloat(ath.stats?.[ptIdx] || 0);
+      if (name && pts > 0) ppgMap[name] = pts;
+    }
+  }
+
+  // ── PARSE QUARTER SCORES ───────────────────────────────────────────────────
+  const bsTeams = raw.boxscore?.teams || [];
+  for (const teamBlock of bsTeams) {
+    const isHome = teamBlock.homeAway === 'home';
+    const linescores = teamBlock.team?.linescores || teamBlock.linescores || [];
+    const qtrs = linescores.map(ls => parseInt(ls.value || ls.displayValue || 0));
+    if (isHome) qtrScores.home = qtrs;
+    else        qtrScores.away = qtrs;
+  }
+
+  // ── PARSE ODDS (pickcenter — more detailed than Odds API) ─────────────────
+  const pc = raw.pickcenter?.[0] || raw.odds?.[0];
+  let espnOdds = null;
+  if (pc) {
+    const details = pc.details || pc.spread || '';
+    const m = details.match(/([A-Z]+)\s+([-+]?\d+\.?\d*)/);
+    espnOdds = {
+      spread:    m ? Math.abs(parseFloat(m[2])) : null,
+      spreadFav: m ? m[1] : null,
+      total:     parseFloat(pc.overUnder || pc.total || 0) || null,
+      provider:  pc.provider?.name || 'ESPN',
+    };
+  }
+
+  // ── PARSE WIN PROBABILITY ──────────────────────────────────────────────────
+  const wpArr = raw.winprobability || [];
+  const winProb = wpArr.length ? wpArr[wpArr.length - 1] : null;
+  // { homeWinPercentage: 0.73, tiePercentage: 0, playId, ... }
+
+  // ── PARSE LEADERS (pts/reb/ast leaders for each team) ─────────────────────
+  const leaders = {};
+  for (const teamLeaders of (raw.leaders || [])) {
+    const abbr = teamLeaders.team?.abbreviation;
+    if (!abbr) continue;
+    leaders[abbr] = {};
+    for (const cat of (teamLeaders.leaders || [])) {
+      const key  = cat.shortDisplayName || cat.name; // PTS, REB, AST
+      const top  = cat.leaders?.[0];
+      if (top) leaders[abbr][key] = {
+        name:   top.athlete?.displayName,
+        value:  top.value,
+        stats:  top.displayValue,
+      };
+    }
+  }
+
+  // ── PARSE SEASON SERIES (H2H) ─────────────────────────────────────────────
+  const ss = raw.seasonseries?.[0];
+  const h2h = ss ? {
+    homeWins: ss.competitors?.find(c => c.homeAway === 'home')?.wins || 0,
+    awayWins: ss.competitors?.find(c => c.homeAway === 'away')?.wins || 0,
+    summary:  ss.summary || '',
+  } : null;
+
+  // ── PARSE LAST 5 GAMES ─────────────────────────────────────────────────────
+  const lastFive = {};
+  for (const teamL5 of (raw.lastFiveGames || [])) {
+    const abbr = teamL5.team?.abbreviation;
+    if (!abbr) continue;
+    lastFive[abbr] = {
+      record: teamL5.events?.map(e => e.atVs + ' ' + (e.gameResult || '')).join(', ') || '',
+      wins:   teamL5.events?.filter(e => e.gameResult === 'W').length || 0,
+      losses: teamL5.events?.filter(e => e.gameResult === 'L').length || 0,
+    };
+  }
+
+  // ── PARSE INJURIES FROM SUMMARY ────────────────────────────────────────────
+  const summaryInjuries = {};
+  for (const teamInj of (raw.injuries || [])) {
+    const abbr = teamInj.team?.abbreviation;
+    if (!abbr) continue;
+    summaryInjuries[abbr] = (teamInj.injuries || []).map(inj => ({
+      name:   inj.athlete?.displayName || '',
+      status: (inj.status || '').toLowerCase().includes('out') ? 'out'
+            : (inj.status || '').toLowerCase().includes('question') ? 'ques' : 'ok',
+      note:   inj.longComment || inj.shortComment || '',
+      pts:    ppgMap[inj.athlete?.displayName] || null,
+    }));
+  }
+
+  const parsed = { ppgMap, qtrScores, espnOdds, winProb, leaders, h2h, lastFive, summaryInjuries };
+  summaryCache[espnId] = { data: parsed, fetchedAt: Date.now() };
+  return parsed;
+}
+
 // ─── 2. ESPN INJURIES (per team) ──────────────────────────────────────────────
 // ESPN team IDs for the 30 teams
 const ESPN_TEAM_IDS = {
@@ -380,23 +501,65 @@ async function assembleGameData(dateStr) {
     injuryMap[t] = await getCachedInjuries(t);
   }));
 
+  // Fetch summaries for all games in parallel (PPG, odds, H2H, quarters, leaders)
+  const summaries = await Promise.all(
+    games.map(g => fetchGameSummary(g.espnId, g.status).catch(() => null))
+  );
+
   // Assemble each game
-  const assembled = games.map(game => {
-    const gameOdds = matchOdds(game, odds);
-    const homeInj  = injuryMap[game.home] || [];
-    const awayInj  = injuryMap[game.away] || [];
+  const assembled = games.map((game, i) => {
+    const sum      = summaries[i];
+    const oddsAPI  = matchOdds(game, odds);
+    const ppgMap   = sum?.ppgMap || {};
+
+    // Prefer Odds API for spread/total (more accurate), fall back to ESPN
+    const espnOdds = sum?.espnOdds;
+    const finalOdds = oddsAPI ? {
+      spread:    oddsAPI.spread.line,
+      spreadFav: oddsAPI.spread.fav === 'home' ? game.home : game.away,
+      total:     oddsAPI.total,
+      source:    'oddsapi',
+    } : espnOdds?.spread ? {
+      spread:    espnOdds.spread,
+      spreadFav: espnOdds.spreadFav,
+      total:     espnOdds.total,
+      source:    'espn',
+    } : null;
+
+    // Use summary injuries if available (has PPG built in), else use our fetched injuries
+    const homeInj = sum?.summaryInjuries?.[game.home]?.length
+      ? sum.summaryInjuries[game.home]
+      : (injuryMap[game.home] || []).map(p => ({
+          ...p,
+          pts: ppgMap[p.name] || p.pts || null,
+        }));
+    const awayInj = sum?.summaryInjuries?.[game.away]?.length
+      ? sum.summaryInjuries[game.away]
+      : (injuryMap[game.away] || []).map(p => ({
+          ...p,
+          pts: ppgMap[p.name] || p.pts || null,
+        }));
+
+    // Enrich injuries with pct using team avg
+    const TEAM_AVG = { ATL:119.2,BOS:120.1,BKN:106.8,CHA:105.2,CHI:108.4,CLE:113.8,DAL:112.6,DEN:113.8,DET:113.4,GSW:114.2,HOU:112.8,IND:118.6,LAC:115.4,LAL:114.8,MEM:115.8,MIA:110.6,MIL:113.6,MIN:112.4,NOP:106.2,NYK:116.4,OKC:118.8,ORL:109.4,PHI:106.8,PHX:114.2,POR:108.6,SAC:116.2,SAS:108.8,TOR:107.4,UTA:104.6,WAS:103.5 };
+    const addPct = (players, team) => players.map(p => ({
+      ...p,
+      pct: p.pts ? Math.round((p.pts / (TEAM_AVG[team] || 112)) * 100) : (p.pct || null),
+    }));
 
     return {
       ...game,
-      odds: gameOdds ? {
-        spread:    gameOdds.spread.line,   // always positive (e.g. 6.5)
-        spreadFav: gameOdds.spread.fav === 'home' ? game.home : game.away,  // always ESPN abbr
-        total:     gameOdds.total,
-      } : null,
+      odds: finalOdds,
       injuries: {
-        [game.home]: homeInj,
-        [game.away]: awayInj,
+        [game.home]: addPct(homeInj, game.home),
+        [game.away]: addPct(awayInj, game.away),
       },
+      // New rich data from ESPN summary
+      qtrScores:  sum?.qtrScores  || null,
+      leaders:    sum?.leaders    || null,
+      h2h:        sum?.h2h        || null,
+      lastFive:   sum?.lastFive   || null,
+      winProb:    sum?.winProb    || null,
     };
   });
 
