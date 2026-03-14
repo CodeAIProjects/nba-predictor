@@ -133,7 +133,7 @@ async function fetchScores(dateStr) {
 // ─── 1b. ESPN GAME SUMMARY (boxscore, odds, leaders, H2H, win prob, PPG) ──────
 const summaryCache = {}; // { espnId: { data, fetchedAt } }
 const SUMMARY_TTL_LIVE   = 10  * 1000;  // 10s when live
-const SUMMARY_TTL_CLOSED = 24 * 60 * 60 * 1000; // 24h when final
+const SUMMARY_TTL_CLOSED = 60 * 60 * 1000; // 1h when final (allows re-parse)
 
 async function fetchGameSummary(espnId, status) {
   const c = summaryCache[espnId];
@@ -228,11 +228,19 @@ async function fetchGameSummary(espnId, status) {
     if (!abbr) continue;
     const events = teamL5.events || [];
 
-    // For each event, determine scored/conceded using homeTeamId + homeTeamScore/awayTeamScore
+    // Derive teamId from first event (atVs='vs' means team is home)
+    const firstEv = events[0];
+    const derivedId = firstEv
+      ? ((firstEv.atVs||'').trim() === 'vs' ? firstEv.homeTeamId : firstEv.awayTeamId)
+      : teamId;
+    const resolvedId = teamId || derivedId;
+
+    // For each event, determine scored/conceded using homeTeamId
     function parseScores(evts) {
       return evts.map(e => {
-        const isHome = String(e.homeTeamId) === String(teamId);
-        const scored  = parseFloat(isHome ? e.homeTeamScore : e.awayTeamScore) || 0;
+        // atVs='vs' means this team was HOME in that game
+        const isHome = (e.atVs||'').trim() === 'vs';
+        const scored   = parseFloat(isHome ? e.homeTeamScore : e.awayTeamScore) || 0;
         const conceded = parseFloat(isHome ? e.awayTeamScore : e.homeTeamScore) || 0;
         return { scored, conceded, atVs: e.atVs, result: e.gameResult };
       }).filter(e => e.scored > 0);
