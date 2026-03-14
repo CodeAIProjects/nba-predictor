@@ -47,7 +47,7 @@
   .s-val{font-family:"Bebas Neue",sans-serif;font-size:1.1rem;letter-spacing:1px}
   .s-val.g{color:var(--green)}.s-val.r{color:var(--red)}.s-val.y{color:var(--gold)}.s-val.c{color:var(--cyan);font-size:.82rem}
   .sdiv{width:1px;height:24px;background:var(--border)}
-  .table-wrap{padding:14px 12px 60px;min-width:1100px}
+  .table-wrap{padding:14px 12px 60px;min-width:1100px;position:relative}
   table{width:100%;border-collapse:collapse}
   thead th{background:#0f1e35;color:var(--gold);font-family:"DM Mono",monospace;font-size:.58rem;letter-spacing:1.5px;text-transform:uppercase;padding:9px 8px;text-align:center;white-space:nowrap;position:sticky;top:0;z-index:50;box-shadow:inset 0 1px 0 var(--border),inset 0 -1px 0 var(--border)}
   tbody tr.game-row td{padding:8px;vertical-align:middle;border-bottom:1px solid rgba(30,45,69,.5);text-align:center;transition:background .15s}
@@ -154,6 +154,16 @@
   .state-title{font-size:.85rem;letter-spacing:2px;color:var(--text2);margin-bottom:6px}
   .state-sub{font-size:.7rem;color:var(--muted)}
   .loading-ball{font-size:3rem;display:inline-block;animation:spin .9s linear infinite}
+
+  /* Preloader — sits inside table-wrap container */
+  .preloader{position:absolute;inset:0;background:rgba(8,14,28,.82);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;opacity:0;pointer-events:none;transition:opacity .2s;border-radius:4px}
+  .preloader.show{opacity:1;pointer-events:all}
+  .pl-spinner{width:40px;height:40px;border:3px solid rgba(56,189,248,.15);border-top-color:var(--cyan);border-radius:50%;animation:spin .7s linear infinite}
+  .pl-date{font-family:'DM Mono',monospace;font-size:.68rem;letter-spacing:2px;color:var(--text2);text-transform:uppercase}
+  .pl-dots span{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--cyan);margin:0 3px;animation:dotPulse 1.2s ease-in-out infinite}
+  .pl-dots span:nth-child(2){animation-delay:.2s}
+  .pl-dots span:nth-child(3){animation-delay:.4s}
+  @keyframes dotPulse{0%,80%,100%{transform:scale(.6);opacity:.4}40%{transform:scale(1);opacity:1}}
   /* ── Odometer score display ── */
   .snum{display:inline-flex;align-items:center;font-variant-numeric:tabular-nums;white-space:nowrap}
   .snum.lead{color:var(--cyan)}
@@ -223,6 +233,11 @@
 </div>
 
 <div class="table-wrap" id="table-wrap">
+  <div class="preloader" id="preloader">
+    <div class="pl-spinner"></div>
+    <div class="pl-date" id="pl-date">Loading...</div>
+    <div class="pl-dots"><span></span><span></span><span></span></div>
+  </div>
   <div class="loading-state"><div class="loading-ball">🏀</div><div class="state-title" style="margin-top:14px">LOADING GAMES...</div></div>
 </div>
 
@@ -369,16 +384,35 @@ function startRefresh(ds) {
   }, isLiveMode ? 10000 : 30000);
 }
 
+function showPreloader(ds) {
+  var pl = document.getElementById('preloader');
+  var plDate = document.getElementById('pl-date');
+  if (!pl) return;
+  var dt = new Date(ds + 'T12:00:00');
+  var label = ds === (window._todayStr || clientToday())
+    ? 'Loading Today'
+    : 'Loading ' + dt.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+  if (plDate) plDate.textContent = label;
+  pl.classList.add('show');
+}
+
+function hidePreloader() {
+  var pl = document.getElementById('preloader');
+  if (pl) pl.classList.remove('show');
+}
+
 function loadGames(ds) {
   var wrap = document.getElementById('table-wrap');
-  if (!wrap.querySelector('table')) wrap.innerHTML = '<div class="loading-state"><div class="loading-ball">🏀</div><div class="state-title" style="margin-top:14px">FETCHING GAMES...</div></div>';
+  showPreloader(ds);
   fetch(API + '/api/data?date=' + ds).then(function(r) {
     if (!r.ok) throw new Error('Server ' + r.status);
     return r.json();
   }).then(function(data) {
     document.getElementById('last-updated').textContent = new Date().toLocaleTimeString();
     render(data);
+    hidePreloader();
   }).catch(function(e) {
+    hidePreloader();
     wrap.innerHTML = '<div class="error-state"><div class="state-icon">⚠️</div><div class="state-title">FAILED TO LOAD</div><div class="state-sub">' + e.message + '</div></div>';
   });
 }
