@@ -226,18 +226,28 @@ async function fetchGameSummary(espnId, status) {
     const abbr = teamL5.team?.abbreviation;
     if (!abbr) continue;
     const events = teamL5.events || [];
-    // Each event: { gameResult, score, opponentScore, atVs, ... }
-    const scored   = events.map(e => parseInt(e.score || e.teamScore || 0)).filter(s => s > 0);
-    const allowed  = events.map(e => parseInt(e.opponentScore || e.opponentTeamScore || 0)).filter(s => s > 0);
-    const avgScored  = scored.length  ? (scored.reduce((a,b)=>a+b,0)/scored.length).toFixed(1)  : null;
-    const avgAllowed = allowed.length ? (allowed.reduce((a,b)=>a+b,0)/allowed.length).toFixed(1) : null;
+
+    function calcAvg(evts) {
+      const scored  = evts.map(e => parseFloat(e.score || e.teamScore || 0)).filter(s => s > 0);
+      const allowed = evts.map(e => parseFloat(e.opponentScore || e.opponentTeamScore || 0)).filter(s => s > 0);
+      return {
+        scored:  scored.length  ? (scored.reduce((a,b)=>a+b,0)/scored.length).toFixed(1)  : null,
+        allowed: allowed.length ? (allowed.reduce((a,b)=>a+b,0)/allowed.length).toFixed(1) : null,
+        games:   evts.length,
+      };
+    }
+
+    // atVs: 'vs' = home game, '@' = away game
+    const homeEvents = events.filter(e => (e.atVs||'').trim() === 'vs');
+    const awayEvents = events.filter(e => (e.atVs||'').trim() === '@');
+
     lastFive[abbr] = {
-      wins:      events.filter(e => e.gameResult === 'W').length,
-      losses:    events.filter(e => e.gameResult === 'L').length,
-      avgScored,
-      avgAllowed,
-      // raw events for debugging
-      events:    events.map(e => ({ result: e.gameResult, score: e.score, opp: e.opponentScore, atVs: e.atVs })),
+      wins:    events.filter(e => e.gameResult === 'W').length,
+      losses:  events.filter(e => e.gameResult === 'L').length,
+      all:     calcAvg(events),
+      home:    calcAvg(homeEvents),   // home game splits
+      away:    calcAvg(awayEvents),   // away game splits
+      rawEvents: events.map(e => ({ result: e.gameResult, score: e.score, opp: e.opponentScore, atVs: e.atVs })),
     };
   }
 
