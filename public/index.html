@@ -419,7 +419,7 @@ function render(data) {
     '<th data-tip="Sharp money / line movement.&#10;Shows current line direction.&#10;Large spread = possible sharp action.">LINE MOVE</th>' +
     '<th data-tip="Overall difficulty rating based on injuries + B2B fatigue.&#10;✅ Clean · ⚠️ Verify first · 🚫 Avoid">DIFFICULTY</th>' +
     '<th data-tip="Model confidence in this pick.&#10;⭐⭐⭐⭐ Strong · ⭐⭐⭐ Standard · ⭐⭐ Lean only&#10;Factors in spread size, injuries, B2B.">CONF</th>' +
-    '<th data-tip="Current win/loss streak · Home streak · Away streak&#10;W3 = won last 3 · L2 = lost last 2&#10;Source: ESPN standings">STREAKS<br>Cur · Home · Away</th>' +
+    '<th data-tip="Current win/loss streak · Home streak · Away streak&#10;W3 = won last 3 · L2 = lost last 2&#10;Source: ESPN standings">STREAK / RECORD<br>Stk · Home · Away</th>' +
     '<th data-tip="Model picks with live result tracking.&#10;Score badge shows actual vs line difference.&#10;WIN PROB from ESPN live win probability.">KEY PICKS</th>' +
     '<th style="width:52px" data-tip="Click to expand 5 analysis panels:&#10;🩹 Injuries · 📋 H2H · 🏃 Pace/O·U&#10;⬛ Quarter Scores · 🧠 Reasoning">MORE</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>';
@@ -914,20 +914,36 @@ function triggerZoom(el) {
 function buildStreakCell(g) {
   var sh = g.streaks && g.streaks[g.home];
   var sa = g.streaks && g.streaks[g.away];
-  function streakBadge(val, lbl) {
+
+  function streakBadge(val) {
     if (!val) return '<span style="color:var(--muted)">—</span>';
     var isWin = val.toString().toUpperCase().startsWith('W');
     var col = isWin ? 'var(--green)' : 'var(--red)';
-    return '<span style="color:'+col+';font-weight:700">'+val+'</span><span style="color:var(--muted);font-size:.55rem"> '+lbl+'</span>';
+    return '<span style="color:'+col+';font-weight:700">'+val+'</span>';
   }
+
+  function recordBadge(val) {
+    if (!val) return '<span style="color:var(--muted)">—</span>';
+    var parts = val.split('-');
+    if (parts.length === 2) {
+      return '<span style="color:var(--green);font-weight:600">'+parts[0]+'</span>'+
+             '<span style="color:var(--muted)">-</span>'+
+             '<span style="color:var(--red);font-weight:600">'+parts[1]+'</span>';
+    }
+    return '<span style="color:var(--text2)">'+val+'</span>';
+  }
+
   function teamRow(team, s) {
-    if (!s) return '<div style="font-size:.62rem;color:var(--muted)">'+team+': —</div>';
-    return '<div style="font-size:.65rem;margin-bottom:3px">'+
-      '<span style="color:var(--text2);font-size:.58rem">'+team+'</span> '+
-      streakBadge(s.current,'cur')+' '+streakBadge(s.home,'H')+' '+streakBadge(s.away,'A')+
+    if (!s) return '<div style="font-size:.62rem;color:var(--muted);margin-bottom:2px">'+team+' —</div>';
+    return '<div style="font-size:.65rem;margin-bottom:4px;line-height:1.5">'+
+      '<span style="color:var(--gold);font-weight:700;font-size:.6rem">'+team+'</span><br>'+
+      '<span style="color:var(--muted);font-size:.55rem">STK </span>'+streakBadge(s.current)+
+      ' <span style="color:var(--muted);font-size:.55rem">H </span>'+recordBadge(s.home)+
+      ' <span style="color:var(--muted);font-size:.55rem">A </span>'+recordBadge(s.away)+
     '</div>';
   }
-  return '<div style="line-height:1.6">'+teamRow(g.home, sh)+teamRow(g.away, sa)+'</div>';
+
+  return teamRow(g.home, sh) + teamRow(g.away, sa);
 }
 
 function renderRow(g, ev) {
