@@ -312,10 +312,12 @@ async function fetchTeamSeasonStats(abbr) {
   const ABBR_NORM = {'NY':'NYK','GS':'GSW','SA':'SAS','NO':'NOP','WSH':'WAS','UTAH':'UTA'};
   const normAbbr = a => ABBR_NORM[a] || a;
 
+  // Store ordered game results for streak computation { date, win, homeAway }
+  const gameResults = [];
+
   for (const ev of data.events) {
     const comp   = ev.competitions?.[0];
     if (!comp) continue;
-    // Status is on comp.status, not ev.status
     const status = comp.status?.type?.name || ev.status?.type?.name || '';
     if (status !== 'STATUS_FINAL') continue;
 
@@ -327,14 +329,26 @@ async function fetchTeamSeasonStats(abbr) {
     const conceded = parseInt(oppComp.score?.value  ?? oppComp.score  ?? 0);
     if (!scored || !conceded) continue;
 
-    if (teamComp.homeAway === 'home') {
+    const isHome = teamComp.homeAway === 'home';
+    const win    = scored > conceded;
+
+    if (isHome) {
       home.scored.push(scored);
       home.conceded.push(conceded);
     } else {
       away.scored.push(scored);
       away.conceded.push(conceded);
     }
+
+    gameResults.push({
+      date:    ev.date?.slice(0, 10),
+      win,
+      isHome,
+    });
   }
+
+  // Sort by date ascending (schedule returns them in order but be safe)
+  gameResults.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
   function avg(arr) { return arr.length ? (arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1) : null; }
   function last5(arr) { return arr.slice(-5); }
@@ -346,10 +360,35 @@ async function fetchTeamSeasonStats(abbr) {
     .filter(Boolean)
     .sort();
 
+  // Compute streaks from ordered game results
+  function calcStreak(games) {
+    if (!games.length) return null;
+    const last  = games[games.length - 1];
+    const isWin = last.win;
+    let count   = 0;
+    for (let i = games.length - 1; i >= 0; i--) {
+      if (games[i].win === isWin) count++;
+      else break;
+    }
+    return (isWin ? 'W' : 'L') + count;
+  }
+
+  const allGames  = gameResults;
+  const homeGames = gameResults.filter(g => g.isHome);
+  const awayGames = gameResults.filter(g => !g.isHome);
+
+  const streakCurrent = calcStreak(allGames);
+  const streakHome    = calcStreak(homeGames);
+  const streakAway    = calcStreak(awayGames);
+
   const result = {
     fetchedAt: Date.now(),
     abbr,
     gameDates, // used for B2B detection
+    // Streaks computed from schedule
+    streakCurrent,
+    streakHome,
+    streakAway,
     home: {
       scored:   avg(home.scored),
       conceded: avg(home.conceded),
@@ -390,40 +429,17 @@ const streakCache = { data: null, fetchedAt: 0 };
 const STREAK_TTL  = 30 * 60 * 1000; // 30 min
 
 async function fetchStreaks() {
-  if (streakCache.data && Date.now() - streakCache.fetchedAt < STREAK_TTL) return streakCache.data;
-
-  const url = 'https://site.api.espn.com/apis/v2/sports/basketball/nba/standings?season=2025&seasontype=2&type=0';
-  const data = await safeFetch(url);
-  if (!data) return null;
-
+  // Streaks are now computed from teamStatsCache (ESPN schedule)
+  // This function just assembles them — no extra API call needed
   const streaks = {};
-  const NORM = { GS:'GSW', SA:'SAS', NO:'NOP', NY:'NYK', WSH:'WAS', UTAH:'UTA' };
-
-  for (const conf of (data.children || [])) {
-    for (const entry of (conf.standings?.entries || [])) {
-      const abbr    = entry.team?.abbreviation;
-      if (!abbr) continue;
-      const ourAbbr = NORM[abbr] || abbr;
-      const stats   = entry.stats || [];
-      const get     = name => stats.find(s => s.name === name)?.displayValue || null;
-
-      // ESPN actual field names from debug:
-      // streak = current W/L streak (e.g. "L1", "W3")
-      // Home   = home record (e.g. "34-7")
-      // Road   = road record (e.g. "30-11")
-      // Last Ten Games = L10 record
-      streaks[ourAbbr] = {
-        current: get('streak'),
-        home:    get('Home'),
-        away:    get('Road'),
-        l10:     get('Last Ten Games'),
-      };
-    }
+  for (const [abbr, ts] of Object.entries(teamStatsCache)) {
+    if (!ts?.streakCurrent) continue;
+    streaks[abbr] = {
+      current: ts.streakCurrent,
+      home:    ts.streakHome,
+      away:    ts.streakAway,
+    };
   }
-
-  streakCache.data      = streaks;
-  streakCache.fetchedAt = Date.now();
-  console.log('[streaks] loaded for', Object.keys(streaks).length, 'teams');
   return streaks;
 }
 
@@ -675,17 +691,14 @@ async function assembleGameData(dateStr) {
   // Fetch injuries + season stats in parallel
   const injuryMap  = {};
   const seasonStats = {};
-  const [, allStreaks] = await Promise.all([
-    Promise.all(teams.map(async t => {
-      const [inj, stats] = await Promise.all([
-        getCachedInjuries(t),
-        fetchTeamSeasonStats(t),
-      ]);
-      injuryMap[t]  = inj;
-      seasonStats[t] = stats;
-    })),
-    fetchStreaks(),
-  ]);
+  await Promise.all(teams.map(async t => {
+    const [inj, stats] = await Promise.all([
+      getCachedInjuries(t),
+      fetchTeamSeasonStats(t),
+    ]);
+    injuryMap[t]   = inj;
+    seasonStats[t] = stats;
+  }));
 
   // Fetch summaries for all games in parallel (PPG, odds, H2H, quarters, leaders)
   const summaries = await Promise.all(
@@ -745,10 +758,18 @@ async function assembleGameData(dateStr) {
         [game.home]: seasonStats[game.home] || null,
         [game.away]: seasonStats[game.away] || null,
       },
-      // Streaks from ESPN standings
+      // Streaks computed from ESPN team schedule (accurate current/home/away)
       streaks: {
-        [game.home]: allStreaks ? allStreaks[game.home] : null,
-        [game.away]: allStreaks ? allStreaks[game.away] : null,
+        [game.home]: seasonStats[game.home] ? {
+          current: seasonStats[game.home].streakCurrent,
+          home:    seasonStats[game.home].streakHome,
+          away:    seasonStats[game.home].streakAway,
+        } : null,
+        [game.away]: seasonStats[game.away] ? {
+          current: seasonStats[game.away].streakCurrent,
+          home:    seasonStats[game.away].streakHome,
+          away:    seasonStats[game.away].streakAway,
+        } : null,
       },
       // B2B detection: did the team play yesterday?
       b2b: (() => {
