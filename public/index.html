@@ -121,6 +121,8 @@
   .state-title{font-size:.85rem;letter-spacing:2px;color:var(--text2);margin-bottom:6px}
   .state-sub{font-size:.7rem;color:var(--muted)}
   .loading-ball{font-size:3rem;display:inline-block;animation:spin .9s linear infinite}
+  @keyframes scoreFlip{0%{transform:rotateX(0deg);color:inherit}30%{transform:rotateX(90deg);color:var(--cyan)}60%{transform:rotateX(-15deg);color:var(--cyan)}100%{transform:rotateX(0deg);color:inherit}}
+  .score-flip{animation:scoreFlip .5s ease forwards;display:inline-block;transform-origin:center}
   @keyframes spin{to{transform:rotate(360deg)}}
   [data-tip]{cursor:help}
   #tt{position:fixed;z-index:9999;background:#0b1629;color:#e2e8f0;font-family:"DM Sans",sans-serif;font-size:.72rem;line-height:1.5;white-space:pre-wrap;max-width:265px;min-width:130px;padding:9px 13px;border-radius:9px;border:1px solid #243654;box-shadow:0 6px 28px rgba(0,0,0,.65);pointer-events:none;opacity:0;transition:opacity .12s}
@@ -220,6 +222,7 @@
 <script>
 var API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:3000' : '';
 var activeDate = null, refreshTimer = null, countdownInt = null, countdownVal = 30, openAccs = new Set();
+var scoreCache = {}; // { espnId: { away: N, home: N } }
 
 function init() {
   loadDates().then(function() {
@@ -278,6 +281,28 @@ function loadGames(ds) {
     return r.json();
   }).then(function(data) {
     document.getElementById('last-updated').textContent = new Date().toLocaleTimeString();
+
+  // Flip animation for live score changes
+  games.forEach(function(g) {
+    if (g.status !== 'inprogress') return;
+    var prev = scoreCache[g.espnId];
+    var curA = parseInt(g.awayScore) || 0;
+    var curH = parseInt(g.homeScore) || 0;
+    if (prev && (prev.away !== curA || prev.home !== curH)) {
+      // Find score elements and trigger flip
+      var row = document.querySelector('[data-eid="' + g.espnId + '"]');
+      if (row) {
+        var snums = row.querySelectorAll('.snum');
+        snums.forEach(function(el) {
+          el.classList.remove('score-flip');
+          void el.offsetWidth; // force reflow
+          el.classList.add('score-flip');
+          setTimeout(function() { el.classList.remove('score-flip'); }, 550);
+        });
+      }
+    }
+    scoreCache[g.espnId] = { away: curA, home: curH };
+  });
     render(data);
   }).catch(function(e) {
     wrap.innerHTML = '<div class="error-state"><div class="state-icon">⚠️</div><div class="state-title">FAILED TO LOAD</div><div class="state-sub">' + e.message + '</div></div>';
@@ -435,7 +460,7 @@ function renderRow(g, ev) {
   var probTxt = g.homeWinProb ? (g.home+' win prob: '+Math.round(g.homeWinProb)+'%') : '—';
   var paceDir = ouPick==='OVER' ? '⬆️ Fast pace — lean OVER '+total : '⬇️ Slow pace — lean UNDER '+total;
 
-  return '<tr class="game-row">' +
+  return '<tr class="game-row" data-eid="'+g.espnId+'">' +
     '<td class="score-cell">'+scoreBox+'</td>' +
     '<td><div class="sl">HOME</div><div class="sv" style="font-size:.72rem">'+(g.homeName||g.home)+'</div><div class="sl" style="margin-top:3px">AWAY</div><div class="sv" style="font-size:.72rem">'+(g.awayName||g.away)+'</div></td>' +
     '<td><div class="line-val" style="white-space:pre-line">'+lineTxt+'</div></td>' +
