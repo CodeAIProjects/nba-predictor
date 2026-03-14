@@ -431,6 +431,7 @@ function render(data) {
     '<th data-tip="Cross-check analysis:&#10;Home offense vs Away defense&#10;Away offense vs Home defense&#10;Season (1x) + L5 (1.5x) weighted.&#10;🔥🔥🔥 = all 4 signals agree with big edge">O/U ANALYSIS</th>' +
     '<th data-tip="Current win/loss streak · Home streak · Away streak&#10;W3 = won last 3 · L2 = lost last 2&#10;Computed from season schedule">STREAK / RECORD<br>Stk · Home · Away</th>' +
     '<th data-tip="How often each team\'s games go OVER or UNDER the current O/U line.&#10;Last 10 games vs full season.&#10;Green = heavy OVER · Red = heavy UNDER">O/U RECORD<br>vs Line</th>' +
+    '<th data-tip="Unified O/U prediction combining all signals:&#10;Season + L5 scoring matchup · O/U hit rate · Streaks · Injuries · Projected total&#10;🔥🔥🔥 Strong · 🔥🔥 Lean · 🔥 Slight">O/U VERDICT</th>' +
     '<th data-tip="Spread = favourite must win by more than this number.&#10;O/U = combined score line.&#10;Source: DraftKings (Odds API) or ESPN fallback.&#10;⚡ Big line = possible sharp action.">MARKET LINE<br>Spread · O/U</th>' +
     '<th data-tip="Back-to-back game flag.&#10;Teams on B2B played yesterday.&#10;B2B teams cover only ~40% of the time — factor into confidence.">B2B</th>' +
     '<th data-tip="Overall difficulty rating based on injuries + B2B fatigue.&#10;✅ Clean · ⚠️ Verify first · 🚫 Avoid">DIFFICULTY</th>' +
@@ -529,6 +530,156 @@ var TEAM_AVG_PTS = {
 };
 
 function teamAvg(abbr) { return TEAM_AVG_PTS[abbr] || 112; }
+
+// ── UNIFIED O/U VERDICT ──────────────────────────────────────────────────────
+// Combines all 5 columns into a single scored prediction
+function calcUnifiedOUVerdict(g) {
+  var total = g.odds && g.odds.total ? parseFloat(g.odds.total) : null;
+  if (!total) return null;
+
+  var ss  = g.seasonStats || {};
+  var ssh = ss[g.home];
+  var ssa = ss[g.away];
+  var inj = g.injuries || {};
+  var homeOut = (inj[g.home] || []).filter(function(p){ return p.status==='out'; }).length;
+  var awayOut = (inj[g.away] || []).filter(function(p){ return p.status==='out'; }).length;
+  var ouRec = g.ouRecord;
+
+  var score = 0;   // positive = OVER, negative = UNDER
+  var maxScore = 0;
+  var signals = [];
+
+  // ── SIGNAL 1: Season cross-check scoring matchup (weight 1.5) ──
+  var sHsc  = ssh && ssh.home ? parseFloat(ssh.home.scored)   : null;
+  var sHcon = ssh && ssh.home ? parseFloat(ssh.home.conceded) : null;
+  var sAsc  = ssa && ssa.away ? parseFloat(ssa.away.scored)   : null;
+  var sAcon = ssa && ssa.away ? parseFloat(ssa.away.conceded) : null;
+  if (sHsc != null && sAcon != null) {
+    var eA = sHsc - sAcon;
+    score += eA > 0 ? 1.5 : eA < 0 ? -1.5 : 0;
+    maxScore += 1.5;
+    signals.push({ lbl: 'Season: '+g.home+' att vs '+g.away+' def', val: eA, w: 1.5 });
+  }
+  if (sAsc != null && sHcon != null) {
+    var eB = sAsc - sHcon;
+    score += eB > 0 ? 1.5 : eB < 0 ? -1.5 : 0;
+    maxScore += 1.5;
+    signals.push({ lbl: 'Season: '+g.away+' att vs '+g.home+' def', val: eB, w: 1.5 });
+  }
+
+  // ── SIGNAL 2: L5 cross-check (weight 2 — more recent = more predictive) ──
+  var l5Hsc  = ssh && ssh.home ? parseFloat(ssh.home.last5scored)   : null;
+  var l5Hcon = ssh && ssh.home ? parseFloat(ssh.home.last5conceded) : null;
+  var l5Asc  = ssa && ssa.away ? parseFloat(ssa.away.last5scored)   : null;
+  var l5Acon = ssa && ssa.away ? parseFloat(ssa.away.last5conceded) : null;
+  if (l5Hsc != null && l5Acon != null) {
+    var eAL = l5Hsc - l5Acon;
+    score += eAL > 0 ? 2 : eAL < 0 ? -2 : 0;
+    maxScore += 2;
+    signals.push({ lbl: 'L5: '+g.home+' att vs '+g.away+' def', val: eAL, w: 2 });
+  }
+  if (l5Asc != null && l5Hcon != null) {
+    var eBL = l5Asc - l5Hcon;
+    score += eBL > 0 ? 2 : eBL < 0 ? -2 : 0;
+    maxScore += 2;
+    signals.push({ lbl: 'L5: '+g.away+' att vs '+g.home+' def', val: eBL, w: 2 });
+  }
+
+  // ── SIGNAL 3: O/U hit rate — last 10 games each team (weight 1) ──
+  if (ouRec) {
+    var hL10 = ouRec.home && ouRec.home.last10;
+    var aL10 = ouRec.away && ouRec.away.last10;
+    if (hL10 && hL10.games) {
+      var hOvPct = hL10.over / hL10.games;
+      score += hOvPct > 0.6 ? 1 : hOvPct < 0.4 ? -1 : 0;
+      maxScore += 1;
+      signals.push({ lbl: g.home+' O/U L10 hit rate', val: hOvPct - 0.5, w: 1 });
+    }
+    if (aL10 && aL10.games) {
+      var aOvPct = aL10.over / aL10.games;
+      score += aOvPct > 0.6 ? 1 : aOvPct < 0.4 ? -1 : 0;
+      maxScore += 1;
+      signals.push({ lbl: g.away+' O/U L10 hit rate', val: aOvPct - 0.5, w: 1 });
+    }
+  }
+
+  // ── SIGNAL 4: Streak momentum (weight 0.5) ──
+  // Teams on winning streaks often in high-scoring games
+  var sh = g.streaks && g.streaks[g.home];
+  var sa = g.streaks && g.streaks[g.away];
+  if (sh && sh.current) {
+    var hStrN = parseInt(sh.current.slice(1));
+    var hStrW = sh.current.startsWith('W');
+    if (hStrN >= 3) { score += hStrW ? 0.5 : -0.5; maxScore += 0.5; signals.push({ lbl: g.home+' streak '+sh.current, val: hStrW ? 1 : -1, w: 0.5 }); }
+  }
+  if (sa && sa.current) {
+    var aStrN = parseInt(sa.current.slice(1));
+    var aStrW = sa.current.startsWith('W');
+    if (aStrN >= 3) { score += aStrW ? 0.5 : -0.5; maxScore += 0.5; signals.push({ lbl: g.away+' streak '+sa.current, val: aStrW ? 1 : -1, w: 0.5 }); }
+  }
+
+  // ── SIGNAL 5: Injury impact (weight 1.5) ──
+  var injImpact = (homeOut + awayOut) * 3;
+  if (injImpact > 0) {
+    var injScore = injImpact > 8 ? -1.5 : injImpact > 4 ? -0.75 : -0.25;
+    score += injScore;
+    maxScore += 1.5;
+    signals.push({ lbl: 'Injuries ('+( homeOut+awayOut)+' out)', val: injScore, w: 1.5 });
+  }
+
+  // ── SIGNAL 6: Projected total vs line (weight 2) ──
+  var projS = (sHsc != null && sAsc != null) ? sHsc + sAsc : null;
+  var projL = (l5Hsc != null && l5Asc != null) ? l5Hsc + l5Asc : null;
+  var proj  = projS && projL ? (projS + projL * 1.5) / 2.5 : projS || projL;
+  if (proj) {
+    var gap = proj - total;
+    score += gap > 3 ? 2 : gap > 0 ? 1 : gap < -3 ? -2 : gap < 0 ? -1 : 0;
+    maxScore += 2;
+    signals.push({ lbl: 'Projected total '+(proj.toFixed(1))+' vs line '+total, val: gap, w: 2 });
+  }
+
+  if (maxScore === 0) return null;
+
+  var lean = score > 0 ? 'OVER' : score < 0 ? 'UNDER' : null;
+  if (!lean) return null;
+
+  // Confidence: how strongly do signals agree (0-100)
+  var confPct = Math.min(Math.round(Math.abs(score) / maxScore * 100), 100);
+  var confLabel = confPct >= 70 ? 'STRONG' : confPct >= 50 ? 'LEAN' : 'SLIGHT';
+  var confStars = confPct >= 70 ? '🔥🔥🔥' : confPct >= 50 ? '🔥🔥' : '🔥';
+
+  return { lean: lean, confPct: confPct, confLabel: confLabel, confStars: confStars, signals: signals, proj: proj, total: total };
+}
+
+function buildUnifiedOUCell(g) {
+  var v = calcUnifiedOUVerdict(g);
+  if (!v) return '<div style="color:var(--muted);font-size:.65rem;text-align:center">No data</div>';
+
+  var isOver = v.lean === 'OVER';
+  var mainCol = isOver ? 'var(--green)' : '#93c5fd';
+  var bgCol   = isOver ? 'rgba(34,197,94,.08)' : 'rgba(147,197,253,.08)';
+  var arrow   = isOver ? '⬆' : '⬇';
+
+  // Confidence bar
+  var barCol = v.confPct >= 70 ? 'var(--green)' : v.confPct >= 50 ? 'var(--yellow)' : 'var(--muted)';
+
+  // Signal breakdown dots
+  var dots = v.signals.map(function(s) {
+    var pos = s.val > 0;
+    return '<span style="color:'+(pos?'var(--green)':'var(--red)')+';font-size:.7rem" title="'+s.lbl+'">'+( pos?'●':'●')+'</span>';
+  }).join('');
+
+  return '<div style="text-align:center;padding:2px 0">'+
+    '<div style="font-size:1.1rem;font-weight:900;color:'+mainCol+';letter-spacing:1px;line-height:1">'+arrow+' '+v.lean+'</div>'+
+    '<div style="font-size:.58rem;color:var(--muted);margin:1px 0">'+v.confLabel+' · '+v.confPct+'%</div>'+
+    // Confidence bar
+    '<div style="width:100%;height:4px;background:rgba(255,255,255,.07);border-radius:2px;margin:3px 0;overflow:hidden">'+
+      '<div style="width:'+v.confPct+'%;height:4px;background:'+barCol+';border-radius:2px;transition:width .4s"></div>'+
+    '</div>'+
+    '<div style="font-size:.72rem">'+v.confStars+'</div>'+
+    (v.proj ? '<div style="font-size:.55rem;color:var(--muted);margin-top:2px">Proj '+v.proj.toFixed(1)+' vs '+v.total+'</div>' : '')+
+  '</div>';
+}
 
 function buildSeasonAvg(g) {
   var ss  = g.seasonStats || {};
@@ -1135,6 +1286,7 @@ function renderRow(g, ev) {
   var totalAvgCell  = buildOUAnalysis(g);
   var streakCell    = buildStreakCell(g);
   var ouRecordCell  = buildOURecordCell(g);
+  var unifiedOUCell = buildUnifiedOUCell(g);
   var pickCells = picks.map(function(p) {
     var pu=p.toUpperCase(), isOU=(pu.indexOf('OVER')>=0||pu.indexOf('UNDER')>=0);
     var r = isOU ? det.ouR : det.spreadR;
@@ -1149,6 +1301,7 @@ function renderRow(g, ev) {
     '<td>'+totalAvgCell+'</td>' +
     '<td>'+streakCell+'</td>' +
     '<td>'+ouRecordCell+'</td>' +
+    '<td>'+unifiedOUCell+'</td>' +
     '<td><div class="line-val" style="white-space:pre-line">'+(spread ? spreadFav+' -'+spread+(total ? '\nO/U '+total : '\nO/U —') : 'No odds\nyet')+'</div>'+(sourceLbl ? '<span class="line-src">via '+sourceLbl+'</span>' : '')+(spread && spread > 8 ? '<span class="line-src" style="color:var(--yellow)">⚡ Big line</span>' : '')+'</td>' +
     (function(){
       var hB2B = g.b2b && g.b2b.home;
@@ -1164,7 +1317,7 @@ function renderRow(g, ev) {
     '<td class="picks-cell">'+pickCells+'</td>' +
     '<td class="more-cell"><div class="more-btn" id="btn-'+accId+'" onclick="toggleAcc(\''+accId+'\')"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div></td>' +
     '</tr>' +
-    '<tr class="acc-row closed" id="'+accId+'"><td colspan="11"><div class="acc-inner">' +
+    '<tr class="acc-row closed" id="'+accId+'"><td colspan="12"><div class="acc-inner">' +
       '<div class="acc-card"><div class="acc-card-title">🩹 Injuries & Impact</div>'+injHtml+'</div>' +
       '<div class="acc-card"><div class="acc-card-title">📋 H2H History</div>' + buildH2H(g) + '</div>' +
       '<div class="acc-card"><div class="acc-card-title">🏃 Pace / O·U Lean</div>' + buildPaceLean(g, ouPick, total) + '</div>' +
