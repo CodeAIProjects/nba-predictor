@@ -339,14 +339,21 @@ async function fetchTeamSeasonStats(abbr) {
   function avg(arr) { return arr.length ? (arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1) : null; }
   function last5(arr) { return arr.slice(-5); }
 
+  // Build game date list for B2B detection
+  const gameDates = data.events
+    .filter(ev => ev.competitions?.[0]?.status?.type?.name === 'STATUS_FINAL' || ev.competitions?.[0]?.status?.type?.state === 'post')
+    .map(ev => ev.date?.slice(0, 10))
+    .filter(Boolean)
+    .sort();
+
   const result = {
     fetchedAt: Date.now(),
     abbr,
+    gameDates, // used for B2B detection
     home: {
       scored:   avg(home.scored),
       conceded: avg(home.conceded),
       games:    home.scored.length,
-      // Last 5 home games
       last5scored:   avg(last5(home.scored)),
       last5conceded: avg(last5(home.conceded)),
     },
@@ -693,6 +700,20 @@ async function assembleGameData(dateStr) {
         [game.home]: seasonStats[game.home] || null,
         [game.away]: seasonStats[game.away] || null,
       },
+      // B2B detection: did the team play yesterday?
+      b2b: (() => {
+        const gameDay = game.startTime?.slice(0, 10);
+        if (!gameDay) return { home: false, away: false };
+        const yesterday = new Date(gameDay);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yStr = yesterday.toISOString().slice(0, 10);
+        const hDates = seasonStats[game.home]?.gameDates || [];
+        const aDates = seasonStats[game.away]?.gameDates || [];
+        return {
+          home: hDates.includes(yStr),
+          away: aDates.includes(yStr),
+        };
+      })(),
       // Rich data from ESPN summary (today's games only)
       qtrScores:  sum?.qtrScores  || null,
       leaders:    sum?.leaders    || null,
