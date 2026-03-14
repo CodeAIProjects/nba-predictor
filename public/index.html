@@ -335,7 +335,8 @@ function render(data) {
     '<th style="width:56px">MORE</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>';
 
-  // Odometer: init on first render, animate on score change
+  // Odometer: DOM rebuilds every poll via innerHTML.
+  // Strategy: snap to PREVIOUS score (or current if first time), then animate to current.
   games.forEach(function(g) {
     if (g.status !== 'inprogress') return;
     var curA = parseInt(g.awayScore) || 0;
@@ -343,15 +344,21 @@ function render(data) {
     var prev = scoreCache[g.espnId];
     var elA  = document.getElementById('odo-' + g.espnId + '-away');
     var elH  = document.getElementById('odo-' + g.espnId + '-home');
+    var snapA = (prev ? prev.away : curA);
+    var snapH = (prev ? prev.home : curH);
 
-    if (!prev) {
-      // First time — initOdo handles double-rAF internally
-      if (elA) initOdo(elA, curA);
-      if (elH) initOdo(elH, curH);
-    } else {
-      if (elA && prev.away !== curA) animOdo(elA, curA);
-      if (elH && prev.home !== curH) animOdo(elH, curH);
+    // Step 1: snap to previous score (no animation) — covers the fresh DOM
+    if (elA) initOdo(elA, snapA);
+    if (elH) initOdo(elH, snapH);
+
+    // Step 2: after initOdo's double-rAF has painted, animate to current score
+    if (prev && (prev.away !== curA || prev.home !== curH)) {
+      requestAnimationFrame(function() { requestAnimationFrame(function() { requestAnimationFrame(function() {
+        if (elA && prev.away !== curA) animOdo(elA, curA);
+        if (elH && prev.home !== curH) animOdo(elH, curH);
+      }); }); });
     }
+
     scoreCache[g.espnId] = { away: curA, home: curH };
   });
 
