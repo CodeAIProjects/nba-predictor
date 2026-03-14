@@ -29,12 +29,18 @@
   .date-scroll{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;flex:1}
   .date-scroll::-webkit-scrollbar{height:3px}
   .date-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-  .date-chip{flex-shrink:0;padding:8px 18px;border-radius:20px;font-family:"DM Mono",monospace;font-size:.72rem;letter-spacing:.8px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text2);transition:all .2s;white-space:nowrap;text-align:center}
-  .date-chip:hover{border-color:rgba(56,189,248,.4);color:var(--cyan);background:rgba(56,189,248,.05)}
-  .date-chip.active{border-color:var(--cyan);background:rgba(56,189,248,.12);color:var(--cyan);font-weight:500}
-  .date-chip.today{border-color:var(--gold);color:var(--gold)}
+  .date-chip{flex-shrink:0;padding:8px 14px;border-radius:10px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text2);transition:all .2s;white-space:nowrap;text-align:center;min-width:52px}
+  .date-chip:hover{border-color:rgba(56,189,248,.4);background:rgba(56,189,248,.05)}
+  .date-chip:hover .chip-day{color:var(--cyan)}
+  .date-chip.active{border-color:var(--cyan);background:rgba(56,189,248,.12)}
+  .date-chip.active .chip-day{color:var(--cyan);font-weight:700}
+  .date-chip.active .chip-name{color:var(--cyan)}
+  .date-chip.today{border-color:var(--gold)}
+  .date-chip.today .chip-day{color:var(--gold)}
+  .date-chip.today .chip-name{color:var(--gold)}
   .date-chip.today.active{background:rgba(245,197,24,.12)}
-  .chip-sub{display:block;font-size:.6rem;color:var(--muted);margin-top:2px}
+  .chip-day{display:block;font-size:1.3rem;font-weight:800;line-height:1;color:var(--text)}
+  .chip-name{display:block;font-size:.58rem;color:var(--muted);margin-top:3px;letter-spacing:.5px;text-transform:uppercase}
   .summary-bar{background:#0a1220;border-bottom:1px solid var(--border);padding:8px 24px;display:flex;gap:20px;align-items:center;flex-wrap:wrap;position:sticky;top:103px;z-index:90}
   .s-item{display:flex;flex-direction:column}
   .s-label{color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-size:.58rem;font-family:"DM Mono",monospace}
@@ -289,11 +295,12 @@ function loadDates() {
       var date = item.date, count = item.count;
       var dt = new Date(date + 'T12:00:00');
       var isT = date === clientToday();
-      var lbl = isT ? 'TODAY' : dt.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
+      var dayNum  = isT ? 'TODAY' : dt.getDate();
+      var dayName = isT ? dt.toLocaleDateString('en-US', {month:'short', day:'numeric'}) : dt.toLocaleDateString('en-US', {weekday:'short', month:'short'});
       var c = document.createElement('div');
       c.className = 'date-chip' + (isT ? ' today' : '');
       c.dataset.date = date;
-      c.innerHTML = lbl + '<span class="chip-sub">' + (count ? count + ' game' + (count !== 1 ? 's' : '') : 'No games') + '</span>';
+      c.innerHTML = '<span class="chip-day">' + dayNum + '</span><span class="chip-name">' + dayName + '</span>';
       c.onclick = function() { selectDate(date); };
       scroll.appendChild(c);
     });
