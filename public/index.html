@@ -473,8 +473,8 @@ function buildSeasonAvg(g) {
     ? '<span style="color:var(--green)">'+aScored+'</span> <span style="color:var(--muted)">sc</span> / <span style="color:var(--red)">'+aAllowed+'</span> <span style="color:var(--muted)">con</span>'
     : aScored+' pts';
 
-  return '<div class="sl">'+g.home+' HOME '+hGames+'</div><div class="sv">'+hLine+'</div>' +
-         '<div class="sl" style="margin-top:3px">'+g.away+' AWAY '+aGames+'</div><div class="sv">'+aLine+'</div>';
+  return '<div class="sl">'+g.home+' HOME GAMES</div><div class="sv">'+hLine+'</div>' +
+         '<div class="sl" style="margin-top:3px">'+g.away+' AWAY GAMES</div><div class="sv">'+aLine+'</div>';
 }
 
 function buildL3Avg(g) {
@@ -491,7 +491,7 @@ function buildL3Avg(g) {
     var line = scored !== '—'
       ? '<span style="color:var(--green)">'+scored+'</span> <span style="color:var(--muted)">sc</span> / <span style="color:var(--red)">'+allowed+'</span> <span style="color:var(--muted)">con</span>'
       : rec;
-    return '<div class="sl">'+team+' L5 ('+rec+')</div><div class="sv">'+line+'</div>';
+    return '<div class="sl">'+team+' LAST 5</div><div class="sv">'+line+'</div>';
   }
 
   return fmtL3(g.home, l5h, true) + fmtL3(g.away, l5a, false);
