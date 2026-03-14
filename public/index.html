@@ -467,11 +467,11 @@ function buildSeasonAvg(g) {
   var aGames    = aSplit ? ' ('+aSplit.games+'G)' : '';
 
   var hLine = hConceded
-    ? '<span style="color:var(--green)">'+hScored+'</span> <span style="color:var(--muted)">sc</span> / <span style="color:var(--red)">'+hConceded+'</span> <span style="color:var(--muted)">con</span>'
-    : hScored+' pts';
+    ? '<span style="color:#4ade80">'+hScored+'</span> <span style="color:#475569">/</span> <span style="color:#f87171">'+hConceded+'</span>'
+    : '<span style="color:#4ade80">'+hScored+'</span>';
   var aLine = aConceded
-    ? '<span style="color:var(--green)">'+aScored+'</span> <span style="color:var(--muted)">sc</span> / <span style="color:var(--red)">'+aConceded+'</span> <span style="color:var(--muted)">con</span>'
-    : aScored+' pts';
+    ? '<span style="color:#4ade80">'+aScored+'</span> <span style="color:#475569">/</span> <span style="color:#f87171">'+aConceded+'</span>'
+    : '<span style="color:#4ade80">'+aScored+'</span>';
 
   return '<div class="sl">'+g.home+' HOME'+hGames+'</div><div class="sv">'+hLine+'</div>' +
          '<div class="sl" style="margin-top:3px">'+g.away+' AWAY'+aGames+'</div><div class="sv">'+aLine+'</div>';
@@ -488,7 +488,7 @@ function buildL3Avg(g) {
     var scored   = split && split.last5scored   ? split.last5scored   : null;
     var conceded = split && split.last5conceded ? split.last5conceded : null;
     if (!scored) return '<div class="sl">'+team+' L5 '+(useHome?'HOME':'AWAY')+'</div><div class="sv" style="color:var(--muted)">—</div>';
-    var line = '<span style="color:var(--green)">'+scored+'</span> <span style="color:var(--muted)">sc</span> / <span style="color:var(--red)">'+conceded+'</span> <span style="color:var(--muted)">con</span>';
+    var line = '<span style="color:#4ade80">'+scored+'</span> <span style="color:#475569">/</span> <span style="color:#f87171">'+conceded+'</span>';
     return '<div class="sl">'+team+' L5 '+(useHome?'HOME':'AWAY')+'</div><div class="sv">'+line+'</div>';
   }
 
@@ -501,7 +501,57 @@ function buildTotalAvg(g) {
   var total = g.odds && g.odds.total;
   var diff = total ? (parseFloat(combined) - parseFloat(total)).toFixed(1) : null;
   var diffStr = diff ? ' (' + (diff > 0 ? '+' : '') + diff + ' vs line)' : '';
-  return '<div class="sv2">'+g.home+': '+hA.toFixed(1)+'\n'+g.away+': '+aA.toFixed(1)+'\nTotal: '+combined+diffStr+'</div>';
+  var lean = calcScoringOULean(g, false);
+  var leanStr = '';
+  if (lean && lean.lean !== 'NEUTRAL') {
+    var leanCol = lean.lean === 'OVER' ? '#4ade80' : '#93c5fd';
+    leanStr = '\n<span style="color:'+leanCol+';font-weight:700">→ '+lean.lean+' '+lean.strength+'</span>' +
+              (lean.vsLine ? ' <span style="color:#475569">(proj '+lean.projTotal+', '+(lean.vsLine>0?'+':'')+lean.vsLine+')</span>' : '');
+  }
+  return '<div class="sv2">'+g.home+': '+hA.toFixed(1)+'\n'+g.away+': '+aA.toFixed(1)+'\nTotal: '+combined+diffStr+leanStr+'</div>';
+}
+
+// O/U prediction from scoring matchup:
+// If home_scored > away_conceded AND away_scored > home_conceded → OVER lean
+// If home_scored < away_conceded AND away_scored < home_conceded → UNDER lean
+function calcScoringOULean(g, useLast5) {
+  var ss  = g.seasonStats || {};
+  var ssh = ss[g.home];
+  var ssa = ss[g.away];
+  if (!ssh || !ssa) return null;
+
+  var hSplit = useLast5 ? ssh.home : ssh.home; // home team HOME games
+  var aSplit = useLast5 ? ssa.away : ssa.away; // away team AWAY games
+
+  var hScored   = parseFloat(useLast5 ? hSplit.last5scored   : hSplit.scored);
+  var hConceded = parseFloat(useLast5 ? hSplit.last5conceded : hSplit.conceded);
+  var aScored   = parseFloat(useLast5 ? aSplit.last5scored   : aSplit.scored);
+  var aConceded = parseFloat(useLast5 ? aSplit.last5conceded : aSplit.conceded);
+
+  if (!hScored || !hConceded || !aScored || !aConceded) return null;
+
+  // Key comparison: how much does each team score vs what the opponent allows?
+  var homeEdge = hScored - aConceded; // positive = home scores more than away allows
+  var awayEdge = aScored - hConceded; // positive = away scores more than home allows
+
+  var total = g.odds && g.odds.total;
+  var projTotal = hScored + aScored;
+  var vsLine = total ? (projTotal - total).toFixed(1) : null;
+
+  var lean, strength;
+  if (homeEdge > 3 && awayEdge > 3) {
+    lean = 'OVER'; strength = (homeEdge + awayEdge > 12) ? '🔥🔥' : '🔥';
+  } else if (homeEdge < -3 && awayEdge < -3) {
+    lean = 'UNDER'; strength = (homeEdge + awayEdge < -12) ? '🔥🔥' : '🔥';
+  } else if (homeEdge > 0 && awayEdge > 0) {
+    lean = 'OVER'; strength = '';
+  } else if (homeEdge < 0 && awayEdge < 0) {
+    lean = 'UNDER'; strength = '';
+  } else {
+    lean = 'NEUTRAL'; strength = '';
+  }
+
+  return { lean, strength, homeEdge: homeEdge.toFixed(1), awayEdge: awayEdge.toFixed(1), projTotal: projTotal.toFixed(1), vsLine };
 }
 
 function buildLineMoveCell(g) {
@@ -537,16 +587,45 @@ function buildPaceLean(g, ouPick, total) {
   var hInj = (g.injuries && g.injuries[g.home] ? g.injuries[g.home] : []).filter(function(p){ return p.status==='out'; }).length;
   var aInj = (g.injuries && g.injuries[g.away] ? g.injuries[g.away] : []).filter(function(p){ return p.status==='out'; }).length;
   var injImpact = (hInj + aInj) * 3;
-  var lean = injImpact > 8 ? 'UNDER' : 'OVER';
+  var injLean = injImpact > 8 ? 'UNDER' : 'OVER';
+
+  // Scoring matchup lean (season stats)
+  var scoringLean   = calcScoringOULean(g, false);
+  var l5ScoringLean = calcScoringOULean(g, true);
+
   var hAvg = teamAvg(g.home), aAvg = teamAvg(g.away);
   var combined = (hAvg + aAvg).toFixed(1);
+
+  // Final lean: if scoring + injury agree → strong signal
+  var finalLean = injLean;
+  var signal = '(injury-based)';
+  if (scoringLean && scoringLean.lean !== 'NEUTRAL') {
+    if (scoringLean.lean === injLean) {
+      signal = '⚡ STRONG — scoring matchup + injury both agree';
+      finalLean = scoringLean.lean;
+    } else if (injImpact <= 3) {
+      finalLean = scoringLean.lean;
+      signal = '(scoring matchup, healthy teams)';
+    }
+  }
+
+  var ss = g.seasonStats && g.seasonStats[g.home];
   var txt = g.home + ' avg: ' + hAvg.toFixed(1) + '\n' +
             g.away + ' avg: ' + aAvg.toFixed(1) + '\n' +
-            'Combined: ' + combined + '\n' +
-            (total ? 'Line: ' + total + '\n' : '') +
-            '→ ' + (lean==='OVER' ? '⬆️ OVER lean' : '⬇️ UNDER lean') +
-            (injImpact > 8 ? ' (injuries suppress scoring)' : ' (healthy teams, run pace)');
-  var cls = lean === 'OVER' ? 'pace-over' : 'pace-under';
+            'Combined: ' + combined + (total ? ' vs line ' + total : '') + '\n';
+
+  if (scoringLean) {
+    txt += '\nScoring matchup (season):\n' +
+           g.home + ' scored vs ' + g.away + ' allowed: ' + (scoringLean.homeEdge > 0 ? '+' : '') + scoringLean.homeEdge + '\n' +
+           g.away + ' scored vs ' + g.home + ' allowed: ' + (scoringLean.awayEdge > 0 ? '+' : '') + scoringLean.awayEdge + '\n';
+  }
+  if (l5ScoringLean && l5ScoringLean.lean !== 'NEUTRAL') {
+    txt += 'L5 form lean: ' + l5ScoringLean.lean + ' ' + l5ScoringLean.strength + '\n';
+  }
+  if (injImpact > 0) txt += 'Injury impact: -' + injImpact + ' pts\n';
+  txt += '\n→ ' + (finalLean === 'OVER' ? '⬆️ OVER lean' : '⬇️ UNDER lean') + ' ' + signal;
+
+  var cls = finalLean === 'OVER' ? 'pace-over' : 'pace-under';
   return '<div class="' + cls + '">' + txt + '</div>';
 }
 
