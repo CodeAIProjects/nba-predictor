@@ -450,27 +450,36 @@ var TEAM_AVG_PTS = {
 function teamAvg(abbr) { return TEAM_AVG_PTS[abbr] || 112; }
 
 function buildSeasonAvg(g) {
-  // Home: pts scored / pts allowed | Away: pts scored / pts allowed
-  var hAvg = teamAvg(g.home).toFixed(1);
-  var aAvg = teamAvg(g.away).toFixed(1);
-  return '<div class="sl">HOME</div><div class="sv">'+hAvg+' pts</div>' +
-         '<div class="sl" style="margin-top:3px">AWAY</div><div class="sv">'+aAvg+' pts</div>';
+  // Season avg pts scored (hardcoded 2025-26). Allowed = approx league avg.
+  var hScored  = teamAvg(g.home).toFixed(1);
+  var aScored  = teamAvg(g.away).toFixed(1);
+  // Defensive avg not in our data yet — show scored only with label
+  return '<div class="sl">HOME</div><div class="sv">'+hScored+' pts</div>' +
+         '<div class="sl" style="margin-top:3px">AWAY</div><div class="sv">'+aScored+' pts</div>';
 }
 
 function buildL3Avg(g) {
-  // Use lastFive data if available, else fall back to season avg
   var l5h = g.lastFive && g.lastFive[g.home];
   var l5a = g.lastFive && g.lastFive[g.away];
-  var hRec = l5h ? (l5h.wins + 'W-' + l5h.losses + 'L') : '—';
-  var aRec = l5a ? (l5a.wins + 'W-' + l5a.losses + 'L') : '—';
-  return '<div class="sl">HOME L5</div><div class="sv">'+hRec+'</div>' +
-         '<div class="sl" style="margin-top:3px">AWAY L5</div><div class="sv">'+aRec+'</div>';
+
+  function fmtL5(team, l5) {
+    if (!l5) return '<div class="sl">'+team+' L5</div><div class="sv">—</div>';
+    var scored  = l5.avgScored  ? l5.avgScored  + ' pts' : (l5.wins + 'W-' + l5.losses + 'L');
+    var allowed = l5.avgAllowed ? l5.avgAllowed + ' all' : '';
+    var txt = l5.avgScored ? scored + (allowed ? ' / ' + allowed : '') : scored;
+    return '<div class="sl">'+team+' L5</div><div class="sv">'+txt+'</div>';
+  }
+
+  return fmtL5(g.home, l5h) + fmtL5(g.away, l5a);
 }
 
 function buildTotalAvg(g) {
   var hA = teamAvg(g.home), aA = teamAvg(g.away);
   var combined = (hA + aA).toFixed(1);
-  return '<div class="sv2">'+g.home+' '+hA.toFixed(1)+'\n'+g.away+' '+aA.toFixed(1)+'\nComb: '+combined+'</div>';
+  var total = g.odds && g.odds.total;
+  var diff = total ? (parseFloat(combined) - parseFloat(total)).toFixed(1) : null;
+  var diffStr = diff ? ' (' + (diff > 0 ? '+' : '') + diff + ' vs line)' : '';
+  return '<div class="sv2">'+g.home+': '+hA.toFixed(1)+'\n'+g.away+': '+aA.toFixed(1)+'\nTotal: '+combined+diffStr+'</div>';
 }
 
 function buildLineMoveCell(g) {
