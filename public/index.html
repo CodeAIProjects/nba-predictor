@@ -335,22 +335,24 @@ function render(data) {
     '<th style="width:56px">MORE</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>';
 
-  // Odometer: snap to position on first render, animate on score change
-  requestAnimationFrame(function() {
-    requestAnimationFrame(function() {
-      games.forEach(function(g) {
-        if (g.status !== 'inprogress') return;
-        var curA = parseInt(g.awayScore) || 0;
-        var curH = parseInt(g.homeScore) || 0;
-        var prev = scoreCache[g.espnId];
-        var elA  = document.getElementById('odo-' + g.espnId + '-away');
-        var elH  = document.getElementById('odo-' + g.espnId + '-home');
-        var changed = prev && (prev.away !== curA || prev.home !== curH);
-        if (elA) setDigits(elA, curA, !!changed);
-        if (elH) setDigits(elH, curH, !!changed);
-        scoreCache[g.espnId] = { away: curA, home: curH };
-      });
-    });
+  // Odometer: init on first render, animate on score change
+  games.forEach(function(g) {
+    if (g.status !== 'inprogress') return;
+    var curA = parseInt(g.awayScore) || 0;
+    var curH = parseInt(g.homeScore) || 0;
+    var prev = scoreCache[g.espnId];
+    var elA  = document.getElementById('odo-' + g.espnId + '-away');
+    var elH  = document.getElementById('odo-' + g.espnId + '-home');
+
+    if (!prev) {
+      // First time — initOdo handles double-rAF internally
+      if (elA) initOdo(elA, curA);
+      if (elH) initOdo(elH, curH);
+    } else {
+      if (elA && prev.away !== curA) animOdo(elA, curA);
+      if (elH && prev.home !== curH) animOdo(elH, curH);
+    }
+    scoreCache[g.espnId] = { away: curA, home: curH };
   });
 
   openAccs.forEach(function(id) {
@@ -401,55 +403,52 @@ function evalDetail(g, spreadFav, spread, total, ouPick) {
 function pickIcon(r) { return r==='win'?'✅':r==='winning'?'🟢':r==='loss'?'❌':r==='losing'?'🔴':r==='push'?'➖':'⏳'; }
 function pickColor(r) { return r==='win'||r==='winning'?'var(--green)':r==='loss'||r==='losing'?'var(--red)':r==='push'?'var(--yellow)':'var(--muted)'; }
 
-// Build odometer HTML — each digit is a <b> with data-value, CSS handles margin-top
+// ── ODOMETER (exact copy from tested demo) ────────────────────────────────────
 function buildOdo(num) {
-  var s = String(num || 0);
-  return '<div class="odo-wrap">' + s.split('').map(function(d) {
-    var rows = '';
-    for (var i = 0; i <= 9; i++) rows += '<span style="display:block">' + i + '</span>';
-    return '<div class="odo-col"><b data-value="' + d + '">' + rows + '</b></div>';
+  return '<div class="odo-wrap">' + String(num || 0).split('').map(function(d) {
+    var spans = '';
+    for (var i = 0; i <= 9; i++) spans += '<span>' + i + '</span>';
+    return '<div class="odo-col"><b data-value="' + d + '">' + spans + '</b></div>';
   }).join('') + '</div>';
 }
 
-function getDigitH(el) {
-  var span = el.querySelector('.odo-col b span');
-  return span ? span.offsetHeight : 0;
+function initOdo(el, num) {
+  el.innerHTML = buildOdo(num);
+  requestAnimationFrame(function() { requestAnimationFrame(function() {
+    var span = el.querySelector('.odo-col b span');
+    if (!span) return;
+    var h = span.offsetHeight;
+    el.querySelectorAll('.odo-col').forEach(function(c) { c.style.height = h + 'px'; });
+    el.querySelectorAll('b').forEach(function(b) {
+      b.style.transition = 'none';
+      b.style.marginTop  = (parseInt(b.dataset.value) * -h) + 'px';
+    });
+  }); });
 }
 
-function setDigits(el, num, animate) {
+function animOdo(el, num) {
   var s  = String(num || 0);
   var bs = el.querySelectorAll('b');
-  if (bs.length !== s.length) {
-    el.innerHTML = buildOdo(num);
-    requestAnimationFrame(function() {
-      requestAnimationFrame(function() { setDigits(el, num, false); });
-    });
-    return;
-  }
-  var h = getDigitH(el);
-  if (!h) return; // not painted yet
-  // Force odo-col height so overflow:hidden clips to exactly 1 digit
-  el.querySelectorAll('.odo-col').forEach(function(col) {
-    col.style.height = h + 'px';
-  });
+  if (bs.length !== s.length) { initOdo(el, num); return; }
+  var span = el.querySelector('.odo-col b span');
+  if (!span) return;
+  var h = span.offsetHeight;
+  el.querySelectorAll('.odo-col').forEach(function(c) { c.style.height = h + 'px'; });
   bs.forEach(function(b, i) {
     var newD = parseInt(s[i]);
-    var oldD = parseInt(b.dataset.value || 0);
-    if (!animate) {
-      b.style.transition = 'none';
-      b.style.marginTop  = (newD * -h) + 'px';
+    var oldD = parseInt(b.dataset.value);
+    if (oldD !== newD) {
       b.dataset.value    = newD;
-    } else if (oldD !== newD) {
-      b.dataset.value    = newD;
-      b.style.transition = 'margin-top .4s cubic-bezier(.75,.15,.6,1.15)';
+      b.style.transition = 'margin-top .45s cubic-bezier(.75,.15,.6,1.15)';
       b.style.marginTop  = (newD * -h) + 'px';
       if (Math.abs(newD - oldD) > 3) {
         b.classList.add('blur');
-        setTimeout(function() { b.classList.remove('blur'); }, 450);
+        setTimeout(function() { b.classList.remove('blur'); }, 500);
       }
     }
   });
 }
+
 
 function renderRow(g, ev) {
   var picks=ev.picks, spreadFav=ev.spreadFav, spread=ev.spread, total=ev.total, ouPick=ev.ouPick;
