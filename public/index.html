@@ -221,13 +221,14 @@
       <div class="legend-row"><span class="legend-sym" style="font-size:.6rem;color:var(--green)">(±)</span><div class="legend-desc"><strong>Badge</strong> — Actual vs line diff</div></div>
     </div>
   </div>
-  <div class="legend-foot">NBA Predictor v3.0 · Live: ESPN + The Odds API + BallDontLie · Auto-refreshes every 30s · For informational purposes only</div>
+  <div class="legend-foot">NBA Predictor v3.0 · Live: ESPN + The Odds API + BallDontLie · Auto-refreshes every 10s live / 30s idle · For informational purposes only</div>
 </footer>
 
 <div id="tt"></div>
 <script>
 var API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:3000' : '';
 var activeDate = null, refreshTimer = null, countdownInt = null, countdownVal = 30, openAccs = new Set();
+var isLiveMode = false;
 var scoreCache = {}; // { espnId: { away: N, home: N } }
 
 function init() {
@@ -269,14 +270,19 @@ function selectDate(ds) {
 }
 
 function startRefresh(ds) {
-  countdownVal = 30;
-  document.getElementById('next-refresh').textContent = '30s';
+  var interval = isLiveMode ? 10 : 30;
+  countdownVal = interval;
+  document.getElementById('next-refresh').textContent = interval + 's';
   countdownInt = setInterval(function() {
     countdownVal--;
     document.getElementById('next-refresh').textContent = countdownVal + 's';
-    if (countdownVal <= 0) countdownVal = 30;
+    if (countdownVal <= 0) countdownVal = isLiveMode ? 10 : 30;
   }, 1000);
-  refreshTimer = setInterval(function() { countdownVal = 30; loadGames(ds); }, 30000);
+  refreshTimer = setInterval(function() {
+    var newInterval = isLiveMode ? 10 : 30;
+    countdownVal = newInterval;
+    loadGames(ds);
+  }, isLiveMode ? 10000 : 30000);
 }
 
 function loadGames(ds) {
@@ -300,9 +306,16 @@ function render(data) {
   var fn = games.filter(function(g){ return g.status === 'closed'; });
   var badge = document.getElementById('status-badge');
   var btxt = document.getElementById('badge-txt');
+  var wasLive = isLiveMode;
+  isLiveMode = lv.length > 0;
   if (lv.length) { badge.className = 'live-badge live'; btxt.textContent = lv.length + ' LIVE'; badge.querySelector('.dot').className = 'dot r'; }
   else if (fn.length === games.length && games.length) { badge.className = 'live-badge done'; btxt.textContent = 'FINAL'; badge.querySelector('.dot').className = 'dot g'; }
   else { badge.className = 'live-badge sched'; btxt.textContent = games.length + ' GAMES'; badge.querySelector('.dot').className = 'dot y'; }
+  // Restart timer if live mode changed (switch between 10s and 30s)
+  if (wasLive !== isLiveMode) {
+    clearInterval(refreshTimer); clearInterval(countdownInt);
+    startRefresh(activeDate);
+  }
   if (!games.length) {
     wrap.innerHTML = '<div class="no-games"><div class="state-icon">🏀</div><div class="state-title">NO GAMES</div><div class="state-sub">No NBA games scheduled for this date.</div></div>';
     updateSummary([], []); return;
