@@ -605,32 +605,36 @@ app.get('/api/debug/odds', async (req, res) => {
 
 // Debug endpoint — test BDL PPG lookup for a player name
 app.get('/api/debug/ppg', async (req, res) => {
-  // Get a recent game ID from today or yesterday
-  const ds = req.query.date || today();
+  // Use a known completed game from yesterday
+  const ds = req.query.date || '2026-03-13';
   const games = await fetchScores(ds);
-  if (!games.length) return res.json({ error: 'no games for ' + ds });
+  const closed = games.find(g => g.status === 'closed') || games[0];
+  if (!closed) return res.json({ error: 'no games', ds });
 
-  const gameId = req.query.id || games[0].espnId;
+  const gameId = req.query.id || closed.espnId;
   const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${gameId}`;
   const data = await safeFetch(url);
-  if (!data) return res.json({ error: 'summary fetch failed', url });
+  if (!data) return res.json({ error: 'fetch failed', url });
 
-  // Show top-level keys and dig into boxscore
-  const topKeys = Object.keys(data);
-  const boxKeys = data.boxscore ? Object.keys(data.boxscore) : null;
-  const firstTeamPlayers = data.boxscore?.players?.[0]?.statistics?.[0];
-
+  // Inspect all the juicy fields
   res.json({
-    gameId, url,
-    topKeys,
-    boxKeys,
-    firstTeamPlayersSample: firstTeamPlayers ? {
-      keys: Object.keys(firstTeamPlayers),
-      names: firstTeamPlayers.names?.slice(0, 10),
-      labels: firstTeamPlayers.labels?.slice(0, 10),
-      firstAthlete: firstTeamPlayers.athletes?.[0]
-    } : null,
-    games: games.map(g => ({ id: g.espnId, home: g.home, away: g.away, status: g.status }))
+    gameId, status: closed.status,
+    topKeys: Object.keys(data),
+    boxscoreKeys: data.boxscore ? Object.keys(data.boxscore) : null,
+    // Boxscore players
+    playersStructure: data.boxscore?.players?.map(team => ({
+      teamAbbr: team.team?.abbreviation,
+      statsKeys: team.statistics?.[0] ? Object.keys(team.statistics[0]) : null,
+      names: team.statistics?.[0]?.names?.slice(0,10),
+      labels: team.statistics?.[0]?.labels?.slice(0,10),
+      firstAthlete: team.statistics?.[0]?.athletes?.[0]
+    })),
+    // Injuries from summary
+    injuriesSample: data.injuries?.slice(0,2),
+    // Odds from summary  
+    oddsSample: data.odds?.[0],
+    // Leaders
+    leadersSample: data.leaders?.slice(0,1),
   });
 });
 
