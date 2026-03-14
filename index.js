@@ -987,10 +987,27 @@ app.get('/api/debug/odds', async (req, res) => {
 
 // Debug endpoint — test BDL PPG lookup for a player name
 app.get('/api/debug/streaks', async (req, res) => {
-  streakCache.fetchedAt = 0; // force refresh
-  const streaks = await fetchStreaks();
-  const sample  = req.query.team ? streaks?.[req.query.team.toUpperCase()] : null;
-  res.json({ total: Object.keys(streaks || {}).length, sample: sample || streaks });
+  // Show raw ESPN response to find correct structure
+  const url = 'https://site.api.espn.com/apis/v2/sports/basketball/nba/standings?season=2025&seasontype=2&type=0';
+  const data = await safeFetch(url);
+  if (!data) return res.json({ error: 'fetch failed' });
+  const topKeys = Object.keys(data);
+  const children = data.children || [];
+  const firstChild = children[0];
+  const firstChildKeys = firstChild ? Object.keys(firstChild) : [];
+  const firstStandings = firstChild?.standings || firstChild?.children?.[0]?.standings;
+  const firstEntry = firstStandings?.entries?.[0];
+  const firstEntryKeys = firstEntry ? Object.keys(firstEntry) : [];
+  const sampleStats = firstEntry?.stats?.slice(0,8).map(s => ({ name:s.name, abbr:s.abbreviation, val:s.displayValue }));
+  res.json({
+    topKeys, childCount: children.length,
+    firstChildKeys,
+    firstChildName: firstChild?.name,
+    hasStandings: !!firstStandings,
+    firstEntryKeys,
+    teamAbbr: firstEntry?.team?.abbreviation,
+    sampleStats,
+  });
 });
 
 app.get('/api/debug/teamstats', async (req, res) => {
