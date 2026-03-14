@@ -54,6 +54,12 @@ async function createTables() {
       total         NUMERIC,
       home_injuries JSONB DEFAULT '[]',
       away_injuries JSONB DEFAULT '[]',
+      qtr_scores    JSONB,
+      leaders       JSONB,
+      h2h           JSONB,
+      last_five     JSONB,
+      win_prob      JSONB,
+      odds_source   TEXT,
       created_at    TIMESTAMPTZ DEFAULT NOW(),
       updated_at    TIMESTAMPTZ DEFAULT NOW()
     );
@@ -74,6 +80,14 @@ async function createTables() {
     CREATE INDEX IF NOT EXISTS idx_games_date   ON games(game_date);
     CREATE INDEX IF NOT EXISTS idx_games_status ON games(status);
     CREATE INDEX IF NOT EXISTS idx_picks_result ON picks(result);
+
+    -- Add new columns if they don't exist yet (safe for existing DBs)
+    ALTER TABLE games ADD COLUMN IF NOT EXISTS qtr_scores  JSONB;
+    ALTER TABLE games ADD COLUMN IF NOT EXISTS leaders     JSONB;
+    ALTER TABLE games ADD COLUMN IF NOT EXISTS h2h         JSONB;
+    ALTER TABLE games ADD COLUMN IF NOT EXISTS last_five   JSONB;
+    ALTER TABLE games ADD COLUMN IF NOT EXISTS win_prob    JSONB;
+    ALTER TABLE games ADD COLUMN IF NOT EXISTS odds_source TEXT;
   `);
 }
 
@@ -95,28 +109,43 @@ async function upsertGame(g) {
   const favTeam = g.odds?.spreadFav ?? null;
   const total   = g.odds?.total     ?? null;
 
+  const qtrScores = g.qtrScores ? JSON.stringify(g.qtrScores) : null;
+  const leaders   = g.leaders   ? JSON.stringify(g.leaders)   : null;
+  const h2h       = g.h2h       ? JSON.stringify(g.h2h)       : null;
+  const lastFive  = g.lastFive  ? JSON.stringify(g.lastFive)  : null;
+  const winProb   = g.winProb   ? JSON.stringify(g.winProb)   : null;
+  const oddsSource = g.odds?.source || null;
+
   if (pgClient) {
     await pgClient.query(`
       INSERT INTO games
         (espn_id, game_date, home_team, away_team, home_name, away_name, venue,
          start_time, status, home_score, away_score, spread, spread_fav, total,
-         home_injuries, away_injuries, updated_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW())
+         home_injuries, away_injuries, qtr_scores, leaders, h2h, last_five, win_prob,
+         odds_source, updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,NOW())
       ON CONFLICT (espn_id) DO UPDATE SET
         status        = EXCLUDED.status,
         home_score    = EXCLUDED.home_score,
         away_score    = EXCLUDED.away_score,
-        spread        = COALESCE(EXCLUDED.spread,    games.spread),
+        spread        = COALESCE(EXCLUDED.spread,     games.spread),
         spread_fav    = COALESCE(EXCLUDED.spread_fav, games.spread_fav),
-        total         = COALESCE(EXCLUDED.total,     games.total),
+        total         = COALESCE(EXCLUDED.total,      games.total),
         home_injuries = EXCLUDED.home_injuries,
         away_injuries = EXCLUDED.away_injuries,
+        qtr_scores    = COALESCE(EXCLUDED.qtr_scores, games.qtr_scores),
+        leaders       = COALESCE(EXCLUDED.leaders,    games.leaders),
+        h2h           = COALESCE(EXCLUDED.h2h,        games.h2h),
+        last_five     = COALESCE(EXCLUDED.last_five,  games.last_five),
+        win_prob      = COALESCE(EXCLUDED.win_prob,   games.win_prob),
+        odds_source   = COALESCE(EXCLUDED.odds_source, games.odds_source),
         updated_at    = NOW()
     `, [
       g.espnId, g.startTime?.slice(0,10) || new Date().toISOString().slice(0,10),
       g.home, g.away, g.homeName, g.awayName, g.venue,
       g.startTime, g.status, g.homeScore, g.awayScore,
       spread, favTeam, total, homeInj, awayInj,
+      qtrScores, leaders, h2h, lastFive, winProb, oddsSource,
     ]);
     return;
   }
@@ -130,11 +159,17 @@ async function upsertGame(g) {
     home: g.home, away: g.away, homeName: g.homeName, awayName: g.awayName,
     venue: g.venue, startTime: g.startTime, status: g.status,
     homeScore: g.homeScore, awayScore: g.awayScore,
-    spread: spread ?? existing.spread,
-    spreadFav: favTeam ?? existing.spreadFav,
-    total: total ?? existing.total,
+    spread:    spread    ?? existing.spread,
+    spreadFav: favTeam   ?? existing.spreadFav,
+    total:     total     ?? existing.total,
     homeInjuries: JSON.parse(homeInj),
     awayInjuries: JSON.parse(awayInj),
+    qtrScores:  g.qtrScores  ?? existing.qtrScores  ?? null,
+    leaders:    g.leaders    ?? existing.leaders    ?? null,
+    h2h:        g.h2h        ?? existing.h2h        ?? null,
+    lastFive:   g.lastFive   ?? existing.lastFive   ?? null,
+    winProb:    g.winProb    ?? existing.winProb    ?? null,
+    oddsSource: g.odds?.source ?? existing.oddsSource ?? null,
     updatedAt: new Date().toISOString(),
   };
   writeFile(db);
