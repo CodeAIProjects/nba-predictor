@@ -122,12 +122,12 @@
   .state-sub{font-size:.7rem;color:var(--muted)}
   .loading-ball{font-size:3rem;display:inline-block;animation:spin .9s linear infinite}
   /* ── Odometer score display ── */
-  .snum{display:inline-flex;align-items:center;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .snum{display:inline-flex;align-items:center;line-height:1;font-variant-numeric:tabular-nums;white-space:nowrap}
   .snum.lead{color:var(--cyan)}
-  .odo-wrap{display:inline-flex}
-  .odo-col{overflow:hidden;height:1.1em;line-height:1.1em}
-  .odo-col b{display:block;font-style:normal;font-weight:inherit;margin-top:0;transition:margin-top .4s cubic-bezier(.75,.15,.6,1.15)}
-  .odo-col b span{display:block;height:1.1em;line-height:1.1em;text-align:center;min-width:.65em}
+  .odo-wrap{display:inline-flex;align-items:center}
+  .odo-col{overflow:hidden;height:1em;line-height:1em;vertical-align:middle}
+  .odo-col b{display:block;font-style:normal;font-weight:inherit;line-height:1em;margin-top:0;transition:margin-top .7s cubic-bezier(.4,0,.2,1)}
+  .odo-col b span{display:block;height:1em;line-height:1em;text-align:center;min-width:.62em}
   .odo-col b.blur{filter:blur(2px)}
   @keyframes spin{to{transform:rotate(360deg)}}
   [data-tip]{cursor:help}
@@ -465,7 +465,7 @@ function renderRow(g, ev) {
   var anyWin = results.some(function(r){return r==='win'||r==='winning';});
   var allLoss = results.every(function(r){return r==='loss'||r==='losing';});
   var live = g.status === 'inprogress';
-  var boxCls = g.status==='scheduled' ? '' : live ? (anyWin?'live-win':allLoss?'live-loss':'live') : (anyWin?'win':allLoss?'loss':'push');
+  var boxCls = g.status==='scheduled' ? '' : live ? 'live' : (anyWin?'win':allLoss?'loss':'push');
   var hs=g.homeScore, as=g.awayScore, tot=hs+as;
   var favS = spreadFav===g.home ? hs : as;
   var margin = favS - (spreadFav===g.home ? as : hs);
