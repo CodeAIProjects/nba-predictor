@@ -62,11 +62,11 @@
   @keyframes breathe{0%,100%{background:rgba(56,189,248,.05);border-color:rgba(56,189,248,.3)}50%{background:rgba(56,189,248,.13);border-color:rgba(56,189,248,.85)}}
   @keyframes breathe-win{0%,100%{background:rgba(34,197,94,.07);border-color:rgba(34,197,94,.35)}50%{background:rgba(34,197,94,.18);border-color:var(--green)}}
   @keyframes breathe-loss{0%,100%{background:rgba(239,68,68,.07);border-color:rgba(239,68,68,.35)}50%{background:rgba(239,68,68,.18);border-color:var(--red)}}
-  .score-teams{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:5px}
-  .team-side{display:flex;align-items:center;gap:5px;flex:1}
-  .team-side.home{justify-content:flex-end}
-  .team-logo{width:26px;height:26px;object-fit:contain}
-  .team-abbr{font-family:"DM Mono",monospace;font-size:.72rem;font-weight:500}
+  .score-teams{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px}
+  .team-side{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1}
+  .team-side.home{align-items:center}
+  .team-logo{width:28px;height:28px;object-fit:contain}
+  .team-abbr{font-family:"DM Mono",monospace;font-size:.62rem;font-weight:600;letter-spacing:.5px;color:var(--text2)}
   .snum{font-family:"Bebas Neue",sans-serif;font-size:1.35rem;color:var(--text2);min-width:30px;text-align:center}
   .snum.lead{color:var(--text)}
   .svs{font-size:.7rem;color:var(--muted);font-family:"DM Mono",monospace}
@@ -986,13 +986,13 @@ function renderRow(g, ev) {
     scoreBox = '<div class="score-box '+boxCls+'"><div class="score-teams">' +
       '<div class="team-side"><img class="team-logo" src="'+g.awayLogo+'" onerror="this.style.display=\'none\'"/><span class="team-abbr">'+g.away+'</span></div>' +
       '<span class="snum '+(aLead?'lead':'')+'" id="odo-'+g.espnId+'-away"><div class="score-wrap">'+buildOdo(as)+'</div></span><span class="svs">—</span><span class="snum '+(hLead?'lead':'')+'" id="odo-'+g.espnId+'-home"><div class="score-wrap">'+buildOdo(hs)+'</div></span>' +
-      '<div class="team-side home"><span class="team-abbr">'+g.home+'</span><img class="team-logo" src="'+g.homeLogo+'" onerror="this.style.display=\'none\'"/></div>' +
+      '<div class="team-side home"><img class="team-logo" src="'+g.homeLogo+'" onerror="this.style.display=\'none\'"/><span class="team-abbr">'+g.home+'</span></div>' +
       '</div>'+stag+'<div class="sb-picks">'+pickLines+'</div></div>';
   } else {
     scoreBox = '<div class="score-box"><div class="score-teams">' +
       '<div class="team-side"><img class="team-logo" src="'+g.awayLogo+'" onerror="this.style.display=\'none\'"/><span class="team-abbr">'+g.away+'</span></div>' +
       '<span class="svs" style="padding:0 8px;font-size:.9rem">@</span>' +
-      '<div class="team-side home"><span class="team-abbr">'+g.home+'</span><img class="team-logo" src="'+g.homeLogo+'" onerror="this.style.display=\'none\'"/></div>' +
+      '<div class="team-side home"><img class="team-logo" src="'+g.homeLogo+'" onerror="this.style.display=\'none\'"/><span class="team-abbr">'+g.home+'</span></div>' +
       '</div>'+stag+'<div class="sb-picks">'+pickLines+'</div></div>';
   }
 
