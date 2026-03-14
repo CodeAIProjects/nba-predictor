@@ -148,9 +148,16 @@
   .inj-pct.out{color:var(--red)}.inj-pct.ques{color:var(--yellow)}
   .inj-note{font-size:.61rem;color:var(--muted);margin-top:1px}
   .inj-pts{font-size:.7rem;color:var(--cyan);font-family:'DM Mono',monospace;white-space:nowrap}
-  .inj-bar-wrap{width:100%;height:5px;background:rgba(255,255,255,.07);border-radius:3px;margin-top:2px;overflow:hidden}
-  .inj-bar{height:5px;border-radius:3px;transition:width .5s}
-  .inj-bar.out{background:var(--red)}.inj-bar.ques{background:var(--yellow)}.inj-bar.ok{background:var(--green)}
+  .inj-bar-wrap{width:100%;height:7px;background:rgba(255,255,255,.06);border-radius:4px;margin-top:3px;overflow:hidden}
+  .inj-bar{height:7px;border-radius:4px;transition:width .6s cubic-bezier(.4,0,.2,1)}
+  .inj-bar.out{background:linear-gradient(90deg,var(--red),rgba(239,68,68,.5))}
+  .inj-bar.ques{background:linear-gradient(90deg,var(--yellow),rgba(250,204,21,.5))}
+  .inj-bar.ok{background:linear-gradient(90deg,var(--green),rgba(34,197,94,.5))}
+  .inj-impact-wrap{width:100%;height:10px;background:rgba(255,255,255,.06);border-radius:5px;margin:4px 0;overflow:hidden;display:flex}
+  .inj-impact-seg{height:10px;transition:width .6s cubic-bezier(.4,0,.2,1)}
+  .inj-impact-available{background:rgba(34,197,94,.4)}
+  .inj-impact-out{background:rgba(239,68,68,.75)}
+  .inj-impact-ques{background:rgba(250,204,21,.6)}
   .no-games,.loading-state,.error-state{text-align:center;padding:70px 20px;font-family:"DM Mono",monospace}
   .state-icon{font-size:3rem;margin-bottom:14px}
   .state-title{font-size:.85rem;letter-spacing:2px;color:var(--text2);margin-bottom:6px}
@@ -998,21 +1005,75 @@ function renderRow(g, ev) {
 
   var injHtml = [g.home, g.away].map(function(team) {
     var pl = inj[team] || [];
+
     if (!pl.length) return '<div class="inj-section"><div class="inj-team-hdr">'+team+' — <span style="color:var(--green)">Full strength ✅</span></div></div>';
-    var outP = pl.filter(function(x){ return x.status==='out'; });
-    var missingPct = Math.min(outP.length * 9, 55);
-    var col = missingPct>30 ? 'var(--red)' : missingPct>15 ? 'var(--yellow)' : 'var(--green)';
+
+    // Calculate total PPG at risk
+    var outPlayers  = pl.filter(function(x){ return x.status==='out'; });
+    var qPlayers    = pl.filter(function(x){ return x.status!=='out'; });
+    var outPct      = outPlayers.reduce(function(s,p){ return s+(parseFloat(p.pct)||0); }, 0);
+    var quesPct     = qPlayers.reduce(function(s,p){ return s+(parseFloat(p.pct)||0)*0.5; }, 0); // 50% impact for Q
+    var totalRisk   = Math.min(Math.round(outPct + quesPct), 100);
+    var availPct    = Math.max(100 - Math.round(outPct) - Math.round(quesPct/2), 0);
+    var hasPpgData  = pl.some(function(p){ return p.pts > 0; });
+
+    var col = outPct > 30 ? 'var(--red)' : outPct > 15 ? 'var(--yellow)' : 'var(--green)';
+    var riskLabel = outPct > 30 ? '⚠️ HIGH RISK' : outPct > 15 ? '⚠️ MODERATE' : '✅ LOW RISK';
+
+    // Team impact summary bar (only when we have % data)
+    var impactBar = hasPpgData
+      ? '<div style="font-size:.55rem;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;margin-bottom:2px">Scoring capacity</div>'+
+        '<div class="inj-impact-wrap">'+
+          '<div class="inj-impact-seg inj-impact-available" style="width:'+availPct+'%" title="Available"></div>'+
+          '<div class="inj-impact-seg inj-impact-ques" style="width:'+Math.round(quesPct/2)+'%" title="Questionable"></div>'+
+          '<div class="inj-impact-seg inj-impact-out" style="width:'+Math.round(outPct)+'%" title="Out"></div>'+
+        '</div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:.52rem;margin-bottom:6px">'+
+          '<span style="color:rgba(34,197,94,.7)">✅ '+availPct+'% available</span>'+
+          (Math.round(quesPct/2)>0 ? '<span style="color:var(--yellow)">❓ '+Math.round(quesPct/2)+'% Q</span>' : '')+
+          (Math.round(outPct)>0 ? '<span style="color:var(--red)">❌ '+Math.round(outPct)+'% out</span>' : '')+
+        '</div>'
+      : '';
+
+    // Player rows
     var rows = pl.map(function(p) {
       var hasPpg = p.pts && p.pts > 0;
-      var ppgHtml = hasPpg
-        ? '<span class="inj-pts" data-tip="'+p.name+' averages '+p.pts+' PPG — '+(p.pct||'?')+'% of '+team+' scoring">'+p.pts+'ppg</span><span class="inj-pct '+p.status+'" data-tip="'+(p.pct||'?')+'% of '+team+' scoring">'+(p.pct||'?')+'%</span>'
-        : '<span class="inj-pct '+p.status+'">'+(p.status==='out'?'OUT':'Q')+'</span>';
+      var barW   = hasPpg ? Math.min(Math.round((p.pct||0) * 2.5), 100) : 0;
+      var statusIcon = p.status === 'out' ? '❌' : '❓';
+      var statusCol  = p.status === 'out' ? 'var(--red)' : 'var(--yellow)';
+
+      var ppgBlock = hasPpg
+        ? '<span style="font-family:DM Mono,monospace;font-size:.65rem;color:var(--cyan)" data-tip="'+p.name+' — '+p.pts+' PPG = '+(p.pct||'?')+'% of '+team+' total scoring">'+p.pts+' ppg</span>'+
+          '<span style="font-size:.58rem;color:'+statusCol+';font-weight:700;margin-left:4px">'+(p.pct||'?')+'%</span>'
+        : '<span style="font-size:.6rem;color:'+statusCol+';font-weight:700">'+(p.status==='out'?'OUT':'Q')+'</span>';
+
       var barHtml = hasPpg
-        ? '<div class="inj-bar-wrap"><div class="inj-bar '+p.status+'" style="width:'+Math.min((p.pct||0)*3,100)+'%"></div></div>'
+        ? '<div class="inj-bar-wrap"><div class="inj-bar '+p.status+'" style="width:'+barW+'%"></div></div>'
         : '';
-      return '<div class="inj-player"><div class="inj-dot '+p.status+'"></div><div class="inj-info"><div class="inj-row1"><span class="inj-name">'+p.name+'</span>'+ppgHtml+'</div>'+barHtml+'<div class="inj-note">'+(p.note||'')+'</div></div></div>';
+
+      var noteHtml = p.note
+        ? '<div style="font-size:.58rem;color:var(--muted);margin-top:1px;font-style:italic">'+p.note+'</div>'
+        : '';
+
+      return '<div class="inj-player" style="margin-bottom:6px">'+
+        '<div style="display:flex;align-items:center;gap:6px;margin-bottom:1px">'+
+          '<span style="font-size:.7rem">'+statusIcon+'</span>'+
+          '<span class="inj-name" style="flex:1">'+p.name+'</span>'+
+          ppgBlock+
+        '</div>'+
+        barHtml+
+        noteHtml+
+      '</div>';
     }).join('');
-    return '<div class="inj-section"><div class="inj-team-hdr">'+team+' — <span style="color:'+col+'">~'+missingPct+'% scoring at risk</span></div>'+rows+'</div>';
+
+    return '<div class="inj-section">'+
+      '<div class="inj-team-hdr" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
+        '<span>'+team+'</span>'+
+        '<span style="font-size:.6rem;color:'+col+';font-weight:700">'+riskLabel+'</span>'+
+      '</div>'+
+      impactBar+
+      rows+
+    '</div>';
   }).join('');
 
   var bc = {go:'go',sus:'sus',avoid:'avoid'}[status] || 'sus';
