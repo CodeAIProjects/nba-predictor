@@ -520,8 +520,9 @@ function calcScoringOULean(g, useLast5) {
   var ssa = ss[g.away];
   if (!ssh || !ssa) return null;
 
-  var hSplit = useLast5 ? ssh.home : ssh.home; // home team HOME games
-  var aSplit = useLast5 ? ssa.away : ssa.away; // away team AWAY games
+  // Season: use full home/away splits. L5: use last5scored/last5conceded from same splits
+  var hSplit = ssh.home; // home team HOME games
+  var aSplit = ssa.away; // away team AWAY games
 
   var hScored   = parseFloat(useLast5 ? hSplit.last5scored   : hSplit.scored);
   var hConceded = parseFloat(useLast5 ? hSplit.last5conceded : hSplit.conceded);
