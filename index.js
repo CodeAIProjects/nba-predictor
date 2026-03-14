@@ -309,16 +309,15 @@ async function fetchTeamSeasonStats(abbr) {
   const home = { scored: [], conceded: [] };
   const away = { scored: [], conceded: [] };
 
+  const ABBR_NORM = {'NY':'NYK','GS':'GSW','SA':'SAS','NO':'NOP','WSH':'WAS','UTAH':'UTA'};
+  const normAbbr = a => ABBR_NORM[a] || a;
+
   for (const ev of data.events) {
-    const status = ev.status?.type?.name;
-    if (status !== 'STATUS_FINAL') continue; // only completed games
-
-    const comp = ev.competitions?.[0];
+    const comp   = ev.competitions?.[0];
     if (!comp) continue;
-
-    // score is an object {value, displayValue} not a string
-    const ABBR_NORM = {'NY':'NYK','GS':'GSW','SA':'SAS','NO':'NOP','WSH':'WAS','UTAH':'UTA'};
-    const normAbbr = a => ABBR_NORM[a] || a;
+    // Status is on comp.status, not ev.status
+    const status = comp.status?.type?.name || ev.status?.type?.name || '';
+    if (status !== 'STATUS_FINAL') continue;
 
     const teamComp = comp.competitors?.find(c => normAbbr(c.team?.abbreviation) === abbr);
     const oppComp  = comp.competitors?.find(c => c !== teamComp);
@@ -910,30 +909,9 @@ app.get('/api/debug/odds', async (req, res) => {
 // Debug endpoint — test BDL PPG lookup for a player name
 app.get('/api/debug/teamstats', async (req, res) => {
   const abbr = (req.query.team || 'LAL').toUpperCase();
-  const tid = ESPN_TEAM_IDS[abbr];
-  const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/schedule`;
-  const data = await safeFetch(url);
-  const events = data?.events || [];
-
-  // Show unique status values and first completed event
-  const statuses = [...new Set(events.map(e => e.competitions?.[0]?.status?.type?.name || e.status?.type?.name))];
-  const firstDone = events.find(e => {
-    const s = e.competitions?.[0]?.status?.type?.name || e.status?.type?.name || '';
-    return s.includes('FINAL') || s.includes('final') || s === 'post';
-  });
-  const comp = firstDone?.competitions?.[0];
-
-  res.json({
-    totalEvents: events.length,
-    uniqueStatuses: statuses,
-    firstDoneStatus: firstDone?.competitions?.[0]?.status?.type?.name || firstDone?.status?.type?.name,
-    firstDoneCompetitors: comp?.competitors?.map(c => ({
-      homeAway: c.homeAway,
-      scoreType: typeof c.score,
-      scoreValue: c.score,
-      abbr: c.team?.abbreviation,
-    })),
-  });
+  delete teamStatsCache[abbr];
+  const stats = await fetchTeamSeasonStats(abbr);
+  res.json({ abbr, stats });
 });
 
 app.get('/api/debug/last5raw', async (req, res) => {
