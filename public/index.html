@@ -29,12 +29,12 @@
   .date-scroll{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;flex:1}
   .date-scroll::-webkit-scrollbar{height:3px}
   .date-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-  .date-chip{flex-shrink:0;padding:5px 12px;border-radius:20px;font-family:"DM Mono",monospace;font-size:.64rem;letter-spacing:.8px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text2);transition:all .2s;white-space:nowrap;text-align:center}
+  .date-chip{flex-shrink:0;padding:8px 18px;border-radius:20px;font-family:"DM Mono",monospace;font-size:.72rem;letter-spacing:.8px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text2);transition:all .2s;white-space:nowrap;text-align:center}
   .date-chip:hover{border-color:rgba(56,189,248,.4);color:var(--cyan);background:rgba(56,189,248,.05)}
   .date-chip.active{border-color:var(--cyan);background:rgba(56,189,248,.12);color:var(--cyan);font-weight:500}
   .date-chip.today{border-color:var(--gold);color:var(--gold)}
   .date-chip.today.active{background:rgba(245,197,24,.12)}
-  .chip-sub{display:block;font-size:.54rem;color:var(--muted);margin-top:1px}
+  .chip-sub{display:block;font-size:.6rem;color:var(--muted);margin-top:2px}
   .summary-bar{background:#0a1220;border-bottom:1px solid var(--border);padding:8px 24px;display:flex;gap:20px;align-items:center;flex-wrap:wrap;position:sticky;top:103px;z-index:90}
   .s-item{display:flex;flex-direction:column}
   .s-label{color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-size:.58rem;font-family:"DM Mono",monospace}
@@ -192,7 +192,7 @@
   </div>
   <div class="header-right">
     <div class="live-badge sched" id="status-badge"><span class="dot y"></span>&nbsp;<span id="badge-txt">LOADING</span></div>
-    <div class="refresh-info">Updated: <span id="last-updated">—</span> &nbsp;·&nbsp; Next: <span id="next-refresh">30s</span></div>
+    <div class="refresh-info">Updated: <span id="last-updated">—</span></div>
   </div>
 </header>
 
