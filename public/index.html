@@ -104,6 +104,32 @@
   .inj-section{margin-bottom:8px}
   .inj-team-hdr{font-family:"DM Mono",monospace;font-size:.6rem;letter-spacing:.8px;color:var(--gold);margin-bottom:4px;text-transform:uppercase}
   .inj-player{display:flex;align-items:flex-start;gap:5px;margin-bottom:5px}
+  /* Seasonal/L3/Total avg columns */
+  .sv{font-size:.78rem;font-weight:600;color:var(--text);font-family:'DM Mono',monospace}
+  .sv2{font-size:.76rem;color:var(--cyan);font-family:'DM Mono',monospace;white-space:pre-line}
+  .sl{font-size:.58rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:1px}
+  /* Line move / sharp */
+  .sharp-txt{color:var(--yellow);font-weight:700;font-size:.72rem;white-space:pre-line}
+  .mild-txt{color:var(--muted);font-size:.72rem;white-space:pre-line}
+  /* H2H / Pace / Why */
+  .h2h-txt{color:var(--purple);font-size:.76rem;white-space:pre-line;line-height:1.7}
+  .pace-over{color:var(--green);font-size:.76rem;white-space:pre-line;line-height:1.7}
+  .pace-under{color:var(--cyan);font-size:.76rem;white-space:pre-line;line-height:1.7}
+  .why-win{font-size:.78rem;line-height:1.8;color:var(--text2)}
+  .why-win .tag{display:inline-block;padding:1px 7px;border-radius:4px;font-size:.6rem;font-weight:700;margin-right:4px}
+  .why-win .tag-g{background:var(--green-bg);color:var(--green);border:1px solid var(--green)}
+  .why-win .tag-r{background:var(--red-bg);color:var(--red);border:1px solid var(--red)}
+  .why-win .tag-y{background:var(--yellow-bg);color:var(--yellow);border:1px solid var(--yellow)}
+  /* Win prob */
+  .win-prob{margin-top:5px;font-size:.68rem;color:var(--purple);font-family:'DM Mono',monospace}
+  /* Quarter scores */
+  .qtr-scores{display:flex;gap:4px;margin-top:4px;font-size:.6rem;font-family:'DM Mono',monospace}
+  .qtr-box{background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:3px;padding:2px 5px;text-align:center;min-width:28px}
+  .qtr-lbl{color:var(--muted);font-size:.55rem}
+  .qtr-val{color:var(--text);font-weight:600}
+  /* Game leaders */
+  .leaders-row{font-size:.68rem;color:var(--text2);margin-top:3px}
+  .leaders-row b{color:var(--cyan);font-weight:600}
   .inj-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:3px}
   .inj-dot.out{background:var(--red)}.inj-dot.ques{background:var(--yellow)}.inj-dot.ok{background:var(--green)}
   .inj-info{flex:1;min-width:0}
@@ -326,13 +352,16 @@ function render(data) {
   wrap.innerHTML = '<table>' +
     '<thead><tr>' +
     '<th>GAME / RESULT</th>' +
-    '<th>TEAMS</th>' +
-    '<th>MARKET LINE</th>' +
+    '<th>SEASONAL AVG<br>Home / Away</th>' +
+    '<th>LAST 3 AVG<br>Home / Away</th>' +
+    '<th>TOTAL AVG<br>Home | Away</th>' +
+    '<th>MARKET LINE<br>Spread · O/U</th>' +
     '<th>B2B</th>' +
+    '<th>LINE MOVE<br>SHARP?</th>' +
     '<th>DIFFICULTY</th>' +
     '<th>CONF</th>' +
     '<th>KEY PICKS</th>' +
-    '<th style="width:56px">MORE</th>' +
+    '<th style="width:52px">MORE</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>';
 
   // Odometer: DOM rebuilds every poll via innerHTML.
@@ -409,6 +438,141 @@ function evalDetail(g, spreadFav, spread, total, ouPick) {
 
 function pickIcon(r) { return r==='win'?'✅':r==='winning'?'🟢':r==='loss'?'❌':r==='losing'?'🔴':r==='push'?'➖':'⏳'; }
 function pickColor(r) { return r==='win'||r==='winning'?'var(--green)':r==='loss'||r==='losing'?'var(--red)':r==='push'?'var(--yellow)':'var(--muted)'; }
+
+// ── TEAM SCORING AVERAGES (2025-26) ──────────────────────────────────────────
+var TEAM_AVG_PTS = {
+  ATL:119.2,BOS:120.1,BKN:106.8,CHA:105.2,CHI:108.4,CLE:113.8,DAL:112.6,DEN:113.8,
+  DET:113.4,GSW:114.2,HOU:112.8,IND:118.6,LAC:115.4,LAL:114.8,MEM:115.8,MIA:110.6,
+  MIL:113.6,MIN:112.4,NOP:106.2,NYK:116.4,OKC:118.8,ORL:109.4,PHI:106.8,PHX:114.2,
+  POR:108.6,SAC:116.2,SAS:108.8,TOR:107.4,UTA:104.6,WAS:103.5
+};
+
+function teamAvg(abbr) { return TEAM_AVG_PTS[abbr] || 112; }
+
+function buildSeasonAvg(g) {
+  // Home: pts scored / pts allowed | Away: pts scored / pts allowed
+  var hAvg = teamAvg(g.home).toFixed(1);
+  var aAvg = teamAvg(g.away).toFixed(1);
+  return '<div class="sl">HOME</div><div class="sv">'+hAvg+' pts</div>' +
+         '<div class="sl" style="margin-top:3px">AWAY</div><div class="sv">'+aAvg+' pts</div>';
+}
+
+function buildL3Avg(g) {
+  // Use lastFive data if available, else fall back to season avg
+  var l5h = g.lastFive && g.lastFive[g.home];
+  var l5a = g.lastFive && g.lastFive[g.away];
+  var hRec = l5h ? (l5h.wins + 'W-' + l5h.losses + 'L') : '—';
+  var aRec = l5a ? (l5a.wins + 'W-' + l5a.losses + 'L') : '—';
+  return '<div class="sl">HOME L5</div><div class="sv">'+hRec+'</div>' +
+         '<div class="sl" style="margin-top:3px">AWAY L5</div><div class="sv">'+aRec+'</div>';
+}
+
+function buildTotalAvg(g) {
+  var hA = teamAvg(g.home), aA = teamAvg(g.away);
+  var combined = (hA + aA).toFixed(1);
+  return '<div class="sv2">'+g.home+' '+hA.toFixed(1)+'\n'+g.away+' '+aA.toFixed(1)+'\nComb: '+combined+'</div>';
+}
+
+function buildLineMoveCell(g) {
+  // Use ESPN pickcenter data if available from odds.source
+  var spread = g.odds ? g.odds.spread : null;
+  var fav    = g.odds ? g.odds.spreadFav : null;
+  if (!spread || !fav) return '<div class="mild-txt">—</div>';
+  // We don't have open line from ESPN yet, show current + sharp if big spread
+  var isSharp = spread && spread > 8; // large spread = possible sharp move
+  var txt = fav + ' -' + spread + (g.odds.total ? '\nO/U ' + g.odds.total : '');
+  return '<div class="' + (isSharp ? 'sharp-txt' : 'mild-txt') + '">' + txt + (isSharp ? '\n⚡ Big line' : '') + '</div>';
+}
+
+function buildWinProb(g) {
+  if (!g.winProb) return '';
+  var hwp = g.winProb.homeWinPercentage;
+  if (hwp == null) return '';
+  var pct = Math.round(hwp * 100);
+  var favTeam = pct >= 50 ? g.home : g.away;
+  var favPct  = pct >= 50 ? pct : 100 - pct;
+  return '<div class="win-prob">WIN PROB: ' + favTeam + ' ' + favPct + '%</div>';
+}
+
+function buildH2H(g) {
+  if (!g.h2h) return '<div class="h2h-txt">—</div>';
+  var h = g.h2h;
+  var txt = 'Season: ' + g.home + ' ' + (h.homeWins||0) + ' – ' + g.away + ' ' + (h.awayWins||0);
+  if (h.summary) txt += '\n' + h.summary;
+  return '<div class="h2h-txt">' + txt + '</div>';
+}
+
+function buildPaceLean(g, ouPick, total) {
+  var hInj = (g.injuries && g.injuries[g.home] ? g.injuries[g.home] : []).filter(function(p){ return p.status==='out'; }).length;
+  var aInj = (g.injuries && g.injuries[g.away] ? g.injuries[g.away] : []).filter(function(p){ return p.status==='out'; }).length;
+  var injImpact = (hInj + aInj) * 3;
+  var lean = injImpact > 8 ? 'UNDER' : 'OVER';
+  var hAvg = teamAvg(g.home), aAvg = teamAvg(g.away);
+  var combined = (hAvg + aAvg).toFixed(1);
+  var txt = g.home + ' avg: ' + hAvg.toFixed(1) + '\n' +
+            g.away + ' avg: ' + aAvg.toFixed(1) + '\n' +
+            'Combined: ' + combined + '\n' +
+            (total ? 'Line: ' + total + '\n' : '') +
+            '→ ' + (lean==='OVER' ? '⬆️ OVER lean' : '⬇️ UNDER lean') +
+            (injImpact > 8 ? ' (injuries suppress scoring)' : ' (healthy teams, run pace)');
+  var cls = lean === 'OVER' ? 'pace-over' : 'pace-under';
+  return '<div class="' + cls + '">' + txt + '</div>';
+}
+
+function buildWhyReasoning(g, det, spread, spreadFav, total, ouPick) {
+  if (!spread) return '<div class="why-win">Odds data unavailable for this game.</div>';
+  var spreadIcon = det.spreadR === 'win' ? '✅' : det.spreadR === 'loss' ? '❌' : det.spreadR === 'winning' ? '🟢' : det.spreadR === 'losing' ? '🔴' : '⏳';
+  var ouIcon     = det.ouR === 'win'    ? '✅' : det.ouR === 'loss'    ? '❌' : det.ouR === 'winning'    ? '🟢' : det.ouR === 'losing'    ? '🔴' : '⏳';
+  var spreadCls  = (det.spreadR === 'win' || det.spreadR === 'winning') ? 'tag-g' : (det.spreadR === 'loss' || det.spreadR === 'losing') ? 'tag-r' : 'tag-y';
+  var ouCls      = (det.ouR    === 'win' || det.ouR    === 'winning') ? 'tag-g' : (det.ouR    === 'loss' || det.ouR    === 'losing') ? 'tag-r' : 'tag-y';
+  var hInj = (g.injuries && g.injuries[g.home] ? g.injuries[g.home] : []).filter(function(p){ return p.status==='out'; });
+  var aInj = (g.injuries && g.injuries[g.away] ? g.injuries[g.away] : []).filter(function(p){ return p.status==='out'; });
+  var injNote = '';
+  if (hInj.length) injNote += g.home + ' missing ' + hInj.length + ' player(s). ';
+  if (aInj.length) injNote += g.away + ' missing ' + aInj.length + ' player(s). ';
+
+  // Game leaders if available
+  var leadersNote = '';
+  if (g.leaders) {
+    var teamKeys = Object.keys(g.leaders);
+    var pts = [];
+    teamKeys.forEach(function(t) {
+      var p = g.leaders[t] && g.leaders[t]['PTS'];
+      if (p) pts.push(p.name + ' ' + p.value + 'pts (' + t + ')');
+    });
+    if (pts.length) leadersNote = '<br><span style="color:var(--gold)">Leaders: ' + pts.join(', ') + '</span>';
+  }
+
+  // Quarter scores if available
+  var qtrNote = '';
+  if (g.qtrScores && g.qtrScores.home && g.qtrScores.home.length) {
+    var qtrs = g.qtrScores;
+    qtrNote = '<br><span style="color:var(--muted);font-size:.66rem">Quarters — ' +
+      g.away + ': ' + qtrs.away.join('-') + ' | ' +
+      g.home + ': ' + qtrs.home.join('-') + '</span>';
+  }
+
+  return '<div class="why-win">' +
+    '<span class="tag ' + spreadCls + '">SPREAD ' + spreadIcon + '</span> ' +
+    spreadFav + ' -' + spread + ' pick. ' + (det.spreadR === 'pending' ? 'Game not started.' : det.spreadR === 'win' ? 'Covered.' : det.spreadR === 'loss' ? 'Did not cover.' : 'Still in progress.') +
+    '<br><span class="tag ' + ouCls + '">' + ouPick + ' ' + ouIcon + '</span> ' +
+    (ouPick || 'O/U') + ' ' + (total||'') + ' pick. ' + (det.ouR === 'pending' ? 'Game not started.' : det.ouR === 'win' ? 'Hit.' : det.ouR === 'loss' ? 'Missed.' : 'Still in progress.') +
+    (injNote ? '<br><span style="color:var(--yellow)">⚠️ ' + injNote + '</span>' : '') +
+    leadersNote + qtrNote +
+  '</div>';
+}
+
+function buildQtrScores(g) {
+  if (!g.qtrScores || !g.qtrScores.home || !g.qtrScores.home.length) return '';
+  var qtrs = g.qtrScores;
+  var labels = ['Q1','Q2','Q3','Q4','OT'];
+  var boxes = qtrs.home.map(function(h, i) {
+    return '<div class="qtr-box"><div class="qtr-lbl">' + (labels[i]||('P'+(i+1))) + '</div>' +
+           '<div class="qtr-val">' + (qtrs.away[i]||0) + '</div>' +
+           '<div class="qtr-val">' + h + '</div></div>';
+  }).join('');
+  return '<div class="qtr-scores">' + boxes + '</div>';
+}
 
 // ── ODOMETER (exact copy from tested demo) ────────────────────────────────────
 function buildOdo(num) {
@@ -534,25 +698,31 @@ function renderRow(g, ev) {
   var probTxt = g.homeWinProb ? (g.home+' win prob: '+Math.round(g.homeWinProb)+'%') : '—';
   var paceDir = ouPick==='OVER' ? '⬆️ Fast pace — lean OVER '+total : '⬇️ Slow pace — lean UNDER '+total;
 
+  var seasonAvgCell = buildSeasonAvg(g);
+  var l3AvgCell     = buildL3Avg(g);
+  var totalAvgCell  = buildTotalAvg(g);
+  var lineMoveCell  = buildLineMoveCell(g);
+  var pickCells = picks.map(function(p) {
+    var pu=p.toUpperCase(), isOU=(pu.indexOf('OVER')>=0||pu.indexOf('UNDER')>=0);
+    var r = isOU ? det.ouR : det.spreadR;
+    var suf = r==='winning'?' ▲':r==='losing'?' ▼':'';
+    return '<div class="pline"><span style="color:'+pickColor(r)+'">'+pickIcon(r)+'</span><span style="color:'+pickColor(r)+'"> '+p+suf+'</span></div>';
+  }).join('') + '<div class="prob">'+probTxt+'</div>' + buildWinProb(g);
+
   return '<tr class="game-row" data-eid="'+g.espnId+'">' +
     '<td class="score-cell">'+scoreBox+'</td>' +
-    '<td><div class="sl">HOME</div><div class="sv" style="font-size:.72rem">'+(g.homeName||g.home)+'</div><div class="sl" style="margin-top:3px">AWAY</div><div class="sv" style="font-size:.72rem">'+(g.awayName||g.away)+'</div></td>' +
+    '<td>'+seasonAvgCell+'</td>' +
+    '<td>'+l3AvgCell+'</td>' +
+    '<td>'+totalAvgCell+'</td>' +
     '<td><div class="line-val" style="white-space:pre-line">'+lineTxt+'</div></td>' +
     '<td><div class="badge '+(homeOut+awayOut>0?'avoid':'go')+'" style="font-size:.85rem">'+(homeOut+awayOut>0?'🔴':'✅')+'</div></td>' +
+    '<td>'+lineMoveCell+'</td>' +
     '<td><div class="badge '+bc+'">'+stxt+'</div></td>' +
     '<td style="text-align:center"><div class="conf-stars">'+conf+'</div><div class="conf-lbl">'+clbl+'</div></td>' +
-    '<td class="picks-cell">' +
-      picks.map(function(p) {
-        var pu=p.toUpperCase(), isOU=(pu.indexOf('OVER')>=0||pu.indexOf('UNDER')>=0);
-        var r = isOU ? det.ouR : det.spreadR;
-        var suf = r==='winning'?' ▲':r==='losing'?' ▼':'';
-        return '<div class="pline"><span style="color:'+pickColor(r)+'">'+pickIcon(r)+'</span><span style="color:'+pickColor(r)+'"> '+p+suf+'</span></div>';
-      }).join('') +
-      '<div class="prob">'+probTxt+'</div>' +
-    '</td>' +
+    '<td class="picks-cell">'+pickCells+'</td>' +
     '<td class="more-cell"><div class="more-btn" id="btn-'+accId+'" onclick="toggleAcc(\''+accId+'\')"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div></td>' +
     '</tr>' +
-    '<tr class="acc-row closed" id="'+accId+'"><td colspan="8"><div class="acc-inner">' +
+    '<tr class="acc-row closed" id="'+accId+'"><td colspan="11"><div class="acc-inner">' +
       '<div class="acc-card"><div class="acc-card-title">🩹 Injuries & Impact</div>'+injHtml+'</div>' +
       '<div class="acc-card"><div class="acc-card-title">🏃 Pace / O·U Lean</div><div class="pace-txt '+(ouPick==='OVER'?'pace-over':'pace-under')+'">'+paceDir+'<br><br>Based on team injury counts and ESPN pace data.</div></div>' +
       '<div class="acc-card"><div class="acc-card-title">📋 H2H History</div><div class="h2h-txt">📍 Venue: '+(g.venue||'—')+'<br><br>Full H2H ATS history available when BallDontLie API key is configured.</div></div>' +
@@ -566,6 +736,22 @@ function renderRow(g, ev) {
         }).join('') +
         (homeOut||awayOut ? '<br><span class="tag tag-r">INJURIES</span> '+homeOut+' home · '+awayOut+' away out' : '') +
       '</div></div>' +
+      '<div class="acc-card">' +
+        '<div class="acc-card-title">📋 H2H History</div>' +
+        buildH2H(g) +
+      '</div>' +
+      '<div class="acc-card">' +
+        '<div class="acc-card-title">🏃 Pace / O·U Lean</div>' +
+        buildPaceLean(g, ouPick, total) +
+      '</div>' +
+      '<div class="acc-card">' +
+        '<div class="acc-card-title">⬛ Quarter Scores</div>' +
+        (buildQtrScores(g) || '<div style="color:var(--muted);font-size:.72rem">Available after game starts</div>') +
+      '</div>' +
+      '<div class="acc-card" style="flex:2">' +
+        '<div class="acc-card-title">🧠 Model Reasoning</div>' +
+        buildWhyReasoning(g, det, spread, spreadFav, total, ouPick) +
+      '</div>' +
     '</div></td></tr>';
 }
 
