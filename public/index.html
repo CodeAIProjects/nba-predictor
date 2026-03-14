@@ -431,9 +431,8 @@ function render(data) {
     '<th data-tip="Cross-check analysis:&#10;Home offense vs Away defense&#10;Away offense vs Home defense&#10;Season (1x) + L5 (1.5x) weighted.&#10;🔥🔥🔥 = all 4 signals agree with big edge">O/U ANALYSIS</th>' +
     '<th data-tip="Current win/loss streak · Home streak · Away streak&#10;W3 = won last 3 · L2 = lost last 2&#10;Computed from season schedule">STREAK / RECORD<br>Stk · Home · Away</th>' +
     '<th data-tip="How often each team\'s games go OVER or UNDER the current O/U line.&#10;Last 10 games vs full season.&#10;Green = heavy OVER · Red = heavy UNDER">O/U RECORD<br>vs Line</th>' +
-    '<th data-tip="Spread = favourite must win by more than this number.&#10;O/U = combined score line.&#10;Source: DraftKings (Odds API) or ESPN fallback.">MARKET LINE<br>Spread · O/U</th>' +
+    '<th data-tip="Spread = favourite must win by more than this number.&#10;O/U = combined score line.&#10;Source: DraftKings (Odds API) or ESPN fallback.&#10;⚡ Big line = possible sharp action.">MARKET LINE<br>Spread · O/U</th>' +
     '<th data-tip="Back-to-back game flag.&#10;Teams on B2B played yesterday.&#10;B2B teams cover only ~40% of the time — factor into confidence.">B2B</th>' +
-    '<th data-tip="Sharp money / line movement.&#10;Shows current line direction.&#10;Large spread = possible sharp action.">LINE MOVE</th>' +
     '<th data-tip="Overall difficulty rating based on injuries + B2B fatigue.&#10;✅ Clean · ⚠️ Verify first · 🚫 Avoid">DIFFICULTY</th>' +
     '<th data-tip="Model confidence in this pick.&#10;⭐⭐⭐⭐ Strong · ⭐⭐⭐ Standard · ⭐⭐ Lean only&#10;Factors in spread size, injuries, B2B.">CONF</th>' +
     '<th data-tip="Model picks with live result tracking.&#10;Score badge shows actual vs line difference.&#10;WIN PROB from ESPN live win probability.">KEY PICKS</th>' +
@@ -928,8 +927,10 @@ function triggerZoom(el) {
 
 
 function buildStreakCell(g) {
-  var sh = g.streaks && g.streaks[g.home];
-  var sa = g.streaks && g.streaks[g.away];
+  var sh  = g.streaks    && g.streaks[g.home];
+  var sa  = g.streaks    && g.streaks[g.away];
+  var ssh = g.seasonStats && g.seasonStats[g.home];
+  var ssa = g.seasonStats && g.seasonStats[g.away];
 
   function sb(val) {
     if (!val) return '<span style="color:var(--muted)">—</span>';
@@ -937,21 +938,45 @@ function buildStreakCell(g) {
     return '<span style="color:'+(w?'var(--green)':'var(--red)')+';font-weight:700">'+val+'</span>';
   }
 
-  function teamRow(team, s) {
-    if (!s) return '<div style="margin-bottom:5px"><div style="font-size:.6rem;color:var(--gold);font-weight:700;letter-spacing:.5px">'+team+'</div><div style="font-size:.68rem;color:var(--muted)">—</div></div>';
-    return '<div style="margin-bottom:6px;line-height:1.5">'+
-      '<div style="font-size:.6rem;color:var(--gold);font-weight:700;letter-spacing:.5px;margin-bottom:1px">'+team+'</div>'+
-      '<div style="font-size:.72rem">'+
-        '<span style="color:var(--muted);font-size:.55rem">STK </span>'+sb(s.current)+
+  function wlBar(wins, games, label) {
+    if (!games) return '';
+    var losses = games - wins;
+    var wPct   = Math.round(wins / games * 100);
+    var lPct   = 100 - wPct;
+    var col    = wPct >= 55 ? 'var(--green)' : wPct <= 45 ? 'var(--red)' : 'var(--yellow)';
+    return '<div style="margin-bottom:4px">'+
+      '<div style="display:flex;justify-content:space-between;font-size:.52rem;color:var(--muted);margin-bottom:1px">'+
+        '<span>'+label+'</span>'+
+        '<span style="color:'+col+';font-weight:700">'+wins+'–'+losses+'</span>'+
       '</div>'+
-      '<div style="font-size:.65rem">'+
-        '<span style="color:var(--muted);font-size:.55rem">H </span>'+sb(s.home)+
-        '<span style="color:var(--muted);font-size:.55rem"> A </span>'+sb(s.away)+
+      '<div style="width:100%;height:4px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;display:flex">'+
+        '<div style="width:'+wPct+'%;background:var(--green);opacity:.75;border-radius:2px 0 0 2px"></div>'+
+        '<div style="width:'+lPct+'%;background:var(--red);opacity:.55;border-radius:0 2px 2px 0"></div>'+
       '</div>'+
     '</div>';
   }
 
-  return teamRow(g.home, sh) + teamRow(g.away, sa);
+  function teamRow(team, s, ss) {
+    if (!s && !ss) return '<div style="margin-bottom:6px"><div style="font-size:.6rem;color:var(--gold);font-weight:700;letter-spacing:.5px">'+team+'</div><div style="font-size:.68rem;color:var(--muted)">—</div></div>';
+    var hW = ss && ss.home ? ss.home.wins : null;
+    var hG = ss && ss.home ? ss.home.games : null;
+    var aW = ss && ss.away ? ss.away.wins : null;
+    var aG = ss && ss.away ? ss.away.games : null;
+    var totalW = (hW != null && aW != null) ? hW + aW : null;
+    var totalG = (hG != null && aG != null) ? hG + aG : null;
+    return '<div style="margin-bottom:7px">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">'+
+        '<span style="font-size:.6rem;color:var(--gold);font-weight:700;letter-spacing:.5px">'+team+'</span>'+
+        (s ? '<span style="font-size:.62rem"><span style="color:var(--muted);font-size:.52rem">STK </span>'+sb(s.current)+'</span>' : '')+
+      '</div>'+
+      (totalW != null ? wlBar(totalW, totalG, 'Overall') : '')+
+      (hW != null ? wlBar(hW, hG, 'Home') : '')+
+      (aW != null ? wlBar(aW, aG, 'Away') : '')+
+      (s ? '<div style="font-size:.6rem;margin-top:1px"><span style="color:var(--muted);font-size:.52rem">H </span>'+sb(s.home)+'<span style="color:var(--muted);font-size:.52rem"> A </span>'+sb(s.away)+'</div>' : '')+
+    '</div>';
+  }
+
+  return teamRow(g.home, sh, ssh) + teamRow(g.away, sa, ssa);
 }
 
 
@@ -1134,7 +1159,6 @@ function renderRow(g, ev) {
   var seasonAvgCell = buildSeasonAvg(g);
   var l3AvgCell     = buildL3Avg(g);
   var totalAvgCell  = buildOUAnalysis(g);
-  var lineMoveCell  = buildLineMoveCell(g);
   var streakCell    = buildStreakCell(g);
   var ouRecordCell  = buildOURecordCell(g);
   var pickCells = picks.map(function(p) {
@@ -1151,7 +1175,7 @@ function renderRow(g, ev) {
     '<td>'+totalAvgCell+'</td>' +
     '<td>'+streakCell+'</td>' +
     '<td>'+ouRecordCell+'</td>' +
-    '<td><div class="line-val" style="white-space:pre-line">'+(spread ? spreadFav+' -'+spread+(total ? '\nO/U '+total : '\nO/U —') : 'No odds\nyet')+'</div>'+(sourceLbl ? '<span class="line-src">via '+sourceLbl+'</span>' : '')+'</td>' +
+    '<td><div class="line-val" style="white-space:pre-line">'+(spread ? spreadFav+' -'+spread+(total ? '\nO/U '+total : '\nO/U —') : 'No odds\nyet')+'</div>'+(sourceLbl ? '<span class="line-src">via '+sourceLbl+'</span>' : '')+(spread && spread > 8 ? '<span class="line-src" style="color:var(--yellow)">⚡ Big line</span>' : '')+'</td>' +
     (function(){
       var hB2B = g.b2b && g.b2b.home;
       var aB2B = g.b2b && g.b2b.away;
@@ -1161,13 +1185,12 @@ function renderRow(g, ev) {
       if (aB2B) txt += g.away+' B2B';
       return '<td><div class="badge avoid" style="font-size:.75rem;padding:3px 6px" title="Back-to-back fatigue">🔄 '+txt.trim()+'</div></td>';
     })()+
-    '<td>'+lineMoveCell+'</td>' +
     '<td><div class="badge '+bc+'">'+stxt+'</div></td>' +
     '<td style="text-align:center"><div class="conf-stars">'+conf+'</div><div class="conf-lbl">'+clbl+'</div></td>' +
     '<td class="picks-cell">'+pickCells+'</td>' +
     '<td class="more-cell"><div class="more-btn" id="btn-'+accId+'" onclick="toggleAcc(\''+accId+'\')"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div></td>' +
     '</tr>' +
-    '<tr class="acc-row closed" id="'+accId+'"><td colspan="12"><div class="acc-inner">' +
+    '<tr class="acc-row closed" id="'+accId+'"><td colspan="11"><div class="acc-inner">' +
       '<div class="acc-card"><div class="acc-card-title">🩹 Injuries & Impact</div>'+injHtml+'</div>' +
       '<div class="acc-card"><div class="acc-card-title">📋 H2H History</div>' + buildH2H(g) + '</div>' +
       '<div class="acc-card"><div class="acc-card-title">🏃 Pace / O·U Lean</div>' + buildPaceLean(g, ouPick, total) + '</div>' +
