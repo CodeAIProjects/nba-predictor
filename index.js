@@ -223,31 +223,38 @@ async function fetchGameSummary(espnId, status) {
   // ── PARSE LAST 5 GAMES ─────────────────────────────────────────────────────
   const lastFive = {};
   for (const teamL5 of (raw.lastFiveGames || [])) {
-    const abbr = teamL5.team?.abbreviation;
+    const abbr   = teamL5.team?.abbreviation;
+    const teamId = teamL5.team?.id;
     if (!abbr) continue;
     const events = teamL5.events || [];
 
-    function calcAvg(evts) {
-      const scored  = evts.map(e => parseFloat(e.score || e.teamScore || 0)).filter(s => s > 0);
-      const allowed = evts.map(e => parseFloat(e.opponentScore || e.opponentTeamScore || 0)).filter(s => s > 0);
-      return {
-        scored:  scored.length  ? (scored.reduce((a,b)=>a+b,0)/scored.length).toFixed(1)  : null,
-        allowed: allowed.length ? (allowed.reduce((a,b)=>a+b,0)/allowed.length).toFixed(1) : null,
-        games:   evts.length,
-      };
+    // For each event, determine scored/conceded using homeTeamId + homeTeamScore/awayTeamScore
+    function parseScores(evts) {
+      return evts.map(e => {
+        const isHome = String(e.homeTeamId) === String(teamId);
+        const scored  = parseFloat(isHome ? e.homeTeamScore : e.awayTeamScore) || 0;
+        const conceded = parseFloat(isHome ? e.awayTeamScore : e.homeTeamScore) || 0;
+        return { scored, conceded, atVs: e.atVs, result: e.gameResult };
+      }).filter(e => e.scored > 0);
     }
 
-    // atVs: 'vs' = home game, '@' = away game
-    const homeEvents = events.filter(e => (e.atVs||'').trim() === 'vs');
-    const awayEvents = events.filter(e => (e.atVs||'').trim() === '@');
+    function calcAvg(parsedEvts) {
+      if (!parsedEvts.length) return { scored: null, conceded: null, games: 0 };
+      const s = parsedEvts.reduce((a,e) => a + e.scored,   0) / parsedEvts.length;
+      const c = parsedEvts.reduce((a,e) => a + e.conceded, 0) / parsedEvts.length;
+      return { scored: s.toFixed(1), conceded: c.toFixed(1), games: parsedEvts.length };
+    }
+
+    const parsed     = parseScores(events);
+    const homeGames  = parsed.filter(e => (e.atVs||'').trim() === 'vs');
+    const awayGames  = parsed.filter(e => (e.atVs||'').trim() === '@');
 
     lastFive[abbr] = {
-      wins:    events.filter(e => e.gameResult === 'W').length,
-      losses:  events.filter(e => e.gameResult === 'L').length,
-      all:     calcAvg(events),
-      home:    calcAvg(homeEvents),   // home game splits
-      away:    calcAvg(awayEvents),   // away game splits
-      rawEvents: events.map(e => ({ result: e.gameResult, score: e.score, opp: e.opponentScore, atVs: e.atVs })),
+      wins:   events.filter(e => e.gameResult === 'W').length,
+      losses: events.filter(e => e.gameResult === 'L').length,
+      all:    calcAvg(parsed),
+      home:   calcAvg(homeGames),
+      away:   calcAvg(awayGames),
     };
   }
 
