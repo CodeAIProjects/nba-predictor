@@ -333,18 +333,27 @@ function render(data) {
     '<th style="width:56px">MORE</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>';
 
-  // Odometer animation on score change for live games
+  // Odometer: set initial positions instantly, then animate only changed digits
   games.forEach(function(g) {
     if (g.status !== 'inprogress') return;
     var curA = parseInt(g.awayScore) || 0;
     var curH = parseInt(g.homeScore) || 0;
     var prev = scoreCache[g.espnId];
+    var elA  = document.getElementById('odo-' + g.espnId + '-away');
+    var elH  = document.getElementById('odo-' + g.espnId + '-home');
 
-    if (prev && (prev.away !== curA || prev.home !== curH)) {
-      var elA = document.getElementById('odo-' + g.espnId + '-away');
-      var elH = document.getElementById('odo-' + g.espnId + '-home');
-      if (elA && prev.away !== curA) animateOdo(elA, curA);
-      if (elH && prev.home !== curH) animateOdo(elH, curH);
+    if (!prev) {
+      // First render — set digits immediately without animation
+      if (elA) setOdoImmediate(elA, curA);
+      if (elH) setOdoImmediate(elH, curH);
+    } else if (prev.away !== curA || prev.home !== curH) {
+      // Score changed — animate changed digits after 1 frame
+      if (elA && prev.away !== curA) requestAnimationFrame(function() { animateOdo(elA, curA); });
+      if (elH && prev.home !== curH) requestAnimationFrame(function() { animateOdo(elH, curH); });
+    } else {
+      // No change — just set immediately (fresh DOM, same score)
+      if (elA) setOdoImmediate(elA, curA);
+      if (elH) setOdoImmediate(elH, curH);
     }
 
     scoreCache[g.espnId] = { away: curA, home: curH };
@@ -398,25 +407,40 @@ function evalDetail(g, spreadFav, spread, total, ouPick) {
 function pickIcon(r) { return r==='win'?'✅':r==='winning'?'🟢':r==='loss'?'❌':r==='losing'?'🔴':r==='push'?'➖':'⏳'; }
 function pickColor(r) { return r==='win'||r==='winning'?'var(--green)':r==='loss'||r==='losing'?'var(--red)':r==='push'?'var(--yellow)':'var(--muted)'; }
 
-// Build odometer digit HTML for a score number
+// Build odometer digit HTML — reels start at position 0, animated after paint
 function buildOdo(num) {
   var s = String(num || 0);
   return s.split('').map(function(d) {
-    return '<span class="odo-digit"><span class="odo-reel" data-digit="'+d+'" style="transform:translateY(-'+d+'00%)">'+
+    // Start at translateY(0) — we animate to correct position after DOM paint
+    return '<span class="odo-digit"><span class="odo-reel" data-digit="'+d+'" style="transform:translateY(0)">'+
       '<span>0</span><span>1</span><span>2</span><span>3</span><span>4</span>'+
       '<span>5</span><span>6</span><span>7</span><span>8</span><span>9</span>'+
     '</span></span>';
   }).join('');
 }
 
-// Animate odometer to new score — only rolls digits that changed
+// Set all reels to their correct position immediately (no transition)
+function setOdoImmediate(el, num) {
+  var s = String(num || 0);
+  var reels = el.querySelectorAll('.odo-reel');
+  for (var i = 0; i < reels.length; i++) {
+    reels[i].style.transition = 'none';
+    reels[i].style.transform  = 'translateY(-' + (s[i] || 0) + '00%)';
+    reels[i].dataset.digit    = s[i] || '0';
+  }
+}
+
+// Animate odometer to new score with rolling transition
 function animateOdo(el, newScore) {
   var newStr = String(newScore || 0);
   var reels  = el.querySelectorAll('.odo-reel');
 
-  // Rebuild if digit count changed
+  // Rebuild if digit count changed (e.g. 99→100), then set immediately
   if (reels.length !== newStr.length) {
     el.innerHTML = buildOdo(newScore);
+    requestAnimationFrame(function() {
+      setOdoImmediate(el, newScore);
+    });
     return;
   }
 
@@ -424,7 +448,8 @@ function animateOdo(el, newScore) {
     var d = newStr[i];
     if (reels[i].dataset.digit !== d) {
       reels[i].dataset.digit = d;
-      reels[i].style.transform = 'translateY(-' + d + '00%)';
+      reels[i].style.transition = 'transform .4s cubic-bezier(.22,.68,0,1.1)';
+      reels[i].style.transform  = 'translateY(-' + d + '00%)';
     }
   }
 }
