@@ -543,55 +543,46 @@ async function fetchTeamRosterPPG(abbr) {
   const tid = ESPN_TEAM_IDS[abbr];
   if (!tid) return {};
 
-  try {
-    // ESPN team stats endpoint — returns all player averages for the team in one call
-    const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/statistics`;
-    const data = await safeFetch(url);
-    const roster = {};
+  // Step 1: get roster to collect athlete IDs + names
+  const rosterUrl = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/roster`;
+  const rData = await safeFetch(rosterUrl);
+  if (!rData?.athletes?.length) return {};
 
-    // Also try the roster endpoint as a source of athlete IDs
-    const rosterUrl = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/roster`;
-    const rData = await safeFetch(rosterUrl);
-    const athletes = (rData?.athletes || []).flatMap(g => g.items || (g.id ? [g] : []));
+  // Flatten athlete groups (ESPN returns [{items:[...]}, ...] or flat array)
+  const allAthletes = rData.athletes.flatMap(g => g.items || (g.id ? [g] : []));
+  if (!allAthletes.length) return {};
 
-    if (athletes.length > 0) {
-      // Fetch stats in batches of 5 to avoid hammering ESPN
-      const batch = athletes.slice(0, 15);
-      await Promise.all(batch.map(async a => {
-        const name = a.displayName || a.fullName;
-        const aid  = a.id;
-        if (!name || !aid) return;
-        try {
-          // Try the athlete statistics endpoint with season param
-          const sUrl = `https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/seasons/2026/types/2/athletes/${aid}/statistics/0`;
-          const sd = await safeFetch(sUrl);
-          // Look in splits for avgPoints
-          const splits = sd?.splits?.categories || [];
-          for (const cat of splits) {
-            const names = cat.names || cat.abbreviations || [];
-            const idx = names.findIndex(n => n === 'avgPoints' || n === 'PTS' || n === 'pts');
-            if (idx >= 0) {
-              const val = parseFloat(cat.stats?.[idx]);
-              if (val > 0) { roster[name] = val; return; }
-            }
-          }
-          // Fallback: try simple stats array
-          if (sd?.stats) {
-            const ptsStat = sd.stats.find(s => s.name === 'avgPoints' || s.abbreviation === 'PTS');
-            if (ptsStat?.value > 0) roster[name] = parseFloat(ptsStat.value);
-          }
-        } catch(e) {}
-      }));
-    }
+  // Step 2: fetch each player's season stats from ESPN athlete stats endpoint
+  // Limit to 13 players to avoid too many requests
+  const roster = {};
+  await Promise.all(allAthletes.slice(0, 13).map(async a => {
+    const name = a.displayName || a.fullName;
+    const aid  = a.id;
+    if (!name || !aid) return;
+    try {
+      const sUrl = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/athletes/${aid}/stats`;
+      const sd = await safeFetch(sUrl);
+      // Look for avgPoints in splits categories
+      const cats = sd?.splits?.categories || [];
+      for (const cat of cats) {
+        const idx = (cat.names || []).indexOf('avgPoints');
+        if (idx >= 0 && cat.stats?.[idx] != null) {
+          roster[name] = parseFloat(cat.stats[idx]);
+          return;
+        }
+        // Also try abbreviations
+        const idx2 = (cat.abbreviations || []).indexOf('PTS');
+        if (idx2 >= 0 && cat.stats?.[idx2] != null) {
+          roster[name] = parseFloat(cat.stats[idx2]);
+          return;
+        }
+      }
+    } catch(e) {}
+  }));
 
-    console.log('[roster ppg] ' + abbr + ' => ' + Object.keys(roster).length + ' players with stats');
-    rosterCache[abbr] = roster;
-    return roster;
-  } catch(e) {
-    console.error('[roster ppg error]', abbr, e.message);
-    rosterCache[abbr] = {};
-    return {};
-  }
+  console.log('[roster ppg] ' + abbr + ' => ' + Object.keys(roster).length + ' players with stats');
+  rosterCache[abbr] = roster;
+  return roster;
 }
 
 async function enrichInjuriesWithPPG(abbr, players) {
@@ -824,8 +815,7 @@ async function assembleGameData(dateStr) {
 // ─── 6. BACKGROUND POLLER ────────────────────────────────────────────────────
 // Polls today's date every 30s while games are live
 function today() {
-  // Use Eastern Time — NBA schedule is ET-based
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  return new Date().toISOString().slice(0, 10);
 }
 
 // ── PREDICTION MODEL ──────────────────────────────────────────────────────────
@@ -1008,10 +998,9 @@ app.get('/api/data', async (req, res) => {
 // GET /api/dates — returns last 7 + next 7 days with game counts (uses ESPN)
 app.get('/api/dates', async (req, res) => {
   const dates = [];
-  // Generate dates relative to today in Eastern Time
-  const todayET = today();
+  const now = new Date();
   for (let i = -4; i <= 4; i++) {
-    const d = new Date(todayET + 'T12:00:00');
+    const d = new Date(now);
     d.setDate(d.getDate() + i);
     dates.push(d.toISOString().slice(0, 10));
   }
