@@ -266,9 +266,18 @@ var activeDate = null, refreshTimer = null, countdownInt = null, countdownVal = 
 var isLiveMode = false;
 var scoreCache = {}; // { espnId: { away: N, home: N } }
 
+function clientToday() {
+  // Use client's LOCAL date, not server UTC date
+  var now = new Date();
+  var y = now.getFullYear();
+  var m = String(now.getMonth() + 1).padStart(2, '0');
+  var d = String(now.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + d;
+}
+
 function init() {
   loadDates().then(function() {
-    selectDate(new Date().toISOString().slice(0,10));
+    selectDate(clientToday());
   });
 }
 
@@ -279,7 +288,7 @@ function loadDates() {
     d.dates.forEach(function(item) {
       var date = item.date, count = item.count;
       var dt = new Date(date + 'T12:00:00');
-      var isT = date === d.today;
+      var isT = date === clientToday();
       var lbl = isT ? 'TODAY' : dt.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
       var c = document.createElement('div');
       c.className = 'date-chip' + (isT ? ' today' : '');
@@ -288,7 +297,7 @@ function loadDates() {
       c.onclick = function() { selectDate(date); };
       scroll.appendChild(c);
     });
-    window._todayStr = d.today;
+    window._todayStr = clientToday();
   }).catch(function(e) { console.error('loadDates', e); });
 }
 
@@ -301,7 +310,7 @@ function selectDate(ds) {
   document.getElementById('header-date').textContent = dt.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric', year:'numeric'});
   clearInterval(refreshTimer); clearInterval(countdownInt);
   loadGames(ds);
-  if (ds === (window._todayStr || new Date().toISOString().slice(0,10))) startRefresh(ds);
+  if (ds === (window._todayStr || clientToday())) startRefresh(ds);
 }
 
 function startRefresh(ds) {
