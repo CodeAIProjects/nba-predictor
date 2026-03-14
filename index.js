@@ -346,10 +346,23 @@ function matchOdds(game, allOdds) {
 }
 
 // ─── 5. ASSEMBLE FULL GAME DATA ───────────────────────────────────────────────
+// Cache injuries separately — only refresh every 10 min (they don't change mid-game)
+const injuryCache = {}; // { "LAL": { data: [...], fetchedAt: N } }
+const INJ_TTL_MS  = 10 * 60 * 1000;
+
+async function getCachedInjuries(abbr) {
+  const c = injuryCache[abbr];
+  if (c && Date.now() - c.fetchedAt < INJ_TTL_MS) return c.data;
+  const raw = await fetchTeamInjuries(abbr);
+  const enriched = await enrichInjuriesWithPPG(abbr, raw);
+  injuryCache[abbr] = { data: enriched, fetchedAt: Date.now() };
+  return enriched;
+}
+
 async function assembleGameData(dateStr) {
   console.log(`[assemble] ${dateStr}`);
 
-  // Fetch scores + odds in parallel
+  // Fetch scores + odds in parallel (scores always fresh, odds cached by fetchOdds)
   const [games, odds] = await Promise.all([
     fetchScores(dateStr),
     fetchOdds(),
@@ -360,13 +373,10 @@ async function assembleGameData(dateStr) {
   // Collect unique teams playing today
   const teams = [...new Set(games.flatMap(g => [g.home, g.away]))];
 
-  // Fetch all injuries in parallel, then enrich with PPG
-  const injuryResults = await Promise.all(teams.map(t => fetchTeamInjuries(t)));
+  // Fetch injuries with caching (won't hammer ESPN every 30s)
   const injuryMap = {};
-  // Enrich with PPG stats from BallDontLie
-  await Promise.all(teams.map(async (t, i) => {
-    const raw = injuryResults[i] || [];
-    injuryMap[t] = await enrichInjuriesWithPPG(t, raw);
+  await Promise.all(teams.map(async t => {
+    injuryMap[t] = await getCachedInjuries(t);
   }));
 
   // Assemble each game
@@ -455,8 +465,11 @@ async function pollToday() {
   const dateStr = today();
   try {
     const existing = cache[dateStr];
-    const isLive = existing?.games?.some(g => g.status === 'inprogress');
-    const ttl    = isLive ? CACHE_TTL_MS : 60 * 1000;
+    const isLive    = existing?.games?.some(g => g.status === 'inprogress');
+    const hasGames  = existing?.games?.length > 0;
+    // If games are live → 30s TTL. If games exist but none live → 30s TTL (game could start any moment).
+    // Only use 60s TTL if we fetched and confirmed zero games today.
+    const ttl = (!hasGames) ? 60 * 1000 : CACHE_TTL_MS;
     if (existing && Date.now() - existing.fetchedAt < ttl) return;
 
     const data = await assembleGameData(dateStr);
@@ -524,7 +537,9 @@ app.get('/api/data', async (req, res) => {
 
   const cached = cache[dateStr];
   const isToday = dateStr === today();
-  const ttl = isToday ? CACHE_TTL_MS : 5 * 60 * 1000;
+  const hasLive = cached?.games?.some(g => g.status === 'inprogress');
+  // Always use short TTL for today or any date with live games
+  const ttl = (isToday || hasLive) ? CACHE_TTL_MS : 5 * 60 * 1000;
 
   if (cached && Date.now() - cached.fetchedAt < ttl) {
     return res.json({ ...cached, cached: true });
