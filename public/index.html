@@ -31,16 +31,18 @@
   .date-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
   .date-chip{flex-shrink:0;padding:8px 14px;border-radius:10px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text2);transition:all .2s;white-space:nowrap;text-align:center;min-width:52px}
   .date-chip:hover{border-color:rgba(56,189,248,.4);background:rgba(56,189,248,.05)}
-  .date-chip:hover .chip-day{color:var(--cyan)}
+  .date-chip:hover .chip-day,.date-chip:hover .chip-month,.date-chip:hover .chip-count{color:var(--cyan)}
   .date-chip.active{border-color:var(--cyan);background:rgba(56,189,248,.12)}
   .date-chip.active .chip-day{color:var(--cyan);font-weight:700}
-  .date-chip.active .chip-name{color:var(--cyan)}
+  .date-chip.active .chip-name,.date-chip.active .chip-month,.date-chip.active .chip-count{color:var(--cyan)}
   .date-chip.today{border-color:var(--gold)}
   .date-chip.today .chip-day{color:var(--gold)}
-  .date-chip.today .chip-name{color:var(--gold)}
+  .date-chip.today .chip-name,.date-chip.today .chip-month,.date-chip.today .chip-count{color:var(--gold)}
   .date-chip.today.active{background:rgba(245,197,24,.12)}
+  .chip-month{display:block;font-size:.52rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
   .chip-day{display:block;font-size:1.3rem;font-weight:800;line-height:1;color:var(--text)}
-  .chip-name{display:block;font-size:.58rem;color:var(--muted);margin-top:3px;letter-spacing:.5px;text-transform:uppercase}
+  .chip-name{display:block;font-size:.52rem;color:var(--muted);margin-top:3px;letter-spacing:.5px;text-transform:uppercase}
+  .chip-count{display:block;font-size:.52rem;color:var(--muted);margin-top:2px;letter-spacing:.3px}
   .summary-bar{background:#0a1220;border-bottom:1px solid var(--border);padding:8px 24px;display:flex;gap:20px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:90}
   .s-item{display:flex;flex-direction:column}
   .s-label{color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-size:.58rem;font-family:"DM Mono",monospace}
@@ -221,7 +223,7 @@
   <div class="sdiv"></div>
   <div class="s-item"><div class="s-label">Win Rate</div><div class="s-val y" id="s-rate">—</div></div>
   <div class="sdiv"></div>
-  <div class="s-item"><div class="s-label">Sources</div><div class="s-val c" id="s-source" style="font-size:.72rem">ESPN · Odds API</div></div>
+
 </div>
 
 <div class="table-wrap" id="table-wrap">
@@ -332,12 +334,18 @@ function loadDates() {
       var date = item.date, count = item.count;
       var dt = new Date(date + 'T12:00:00');
       var isT = date === clientToday();
+      var month   = dt.toLocaleDateString('en-US', {month:'short'}).toUpperCase();
       var dayNum  = isT ? 'TODAY' : dt.getDate();
-      var dayName = isT ? dt.toLocaleDateString('en-US', {month:'short', day:'numeric'}) : dt.toLocaleDateString('en-US', {weekday:'short', month:'short'});
+      var weekday = isT ? '' : dt.toLocaleDateString('en-US', {weekday:'short'}).toUpperCase();
+      var gamesCt = count ? count + (count === 1 ? ' game' : ' games') : 'No games';
       var c = document.createElement('div');
       c.className = 'date-chip' + (isT ? ' today' : '');
       c.dataset.date = date;
-      c.innerHTML = '<span class="chip-day">' + dayNum + '</span><span class="chip-name">' + dayName + '</span>';
+      c.innerHTML =
+        '<span class="chip-month">' + (isT ? month : month) + '</span>' +
+        '<span class="chip-day">' + dayNum + '</span>' +
+        (weekday ? '<span class="chip-name">' + weekday + '</span>' : '') +
+        '<span class="chip-count">' + gamesCt + '</span>';
       c.onclick = function() { selectDate(date); };
       scroll.appendChild(c);
     });
