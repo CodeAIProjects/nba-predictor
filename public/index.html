@@ -125,16 +125,9 @@
   .snum{display:inline-flex;align-items:center;font-variant-numeric:tabular-nums;white-space:nowrap}
   .snum.lead{color:var(--cyan)}
   .odo-wrap{display:inline-flex}
-  .odo-col{overflow:hidden}
-  .odo-col b{
-    display:block;
-    font-style:normal;
-    font-weight:inherit;
-    font-size:inherit;
-    text-align:center;
-    margin-top:0;
-    transition:margin-top .4s cubic-bezier(.75,.15,.6,1.15);
-  }
+  .odo-col{overflow:hidden;height:1.1em;line-height:1.1em}
+  .odo-col b{display:block;font-style:normal;font-weight:inherit;margin-top:0;transition:margin-top .4s cubic-bezier(.75,.15,.6,1.15)}
+  .odo-col b span{display:block;height:1.1em;line-height:1.1em;text-align:center;min-width:.65em}
   .odo-col b.blur{filter:blur(2px)}
   @keyframes spin{to{transform:rotate(360deg)}}
   [data-tip]{cursor:help}
@@ -419,8 +412,8 @@ function buildOdo(num) {
 }
 
 function getDigitH(el) {
-  var span = el.querySelector('b span');
-  return span ? span.getBoundingClientRect().height : 20;
+  var span = el.querySelector('.odo-col b span');
+  return span ? span.offsetHeight : 0;
 }
 
 function setDigits(el, num, animate) {
@@ -433,7 +426,12 @@ function setDigits(el, num, animate) {
     });
     return;
   }
-  var h = getDigitH(el) || 20;
+  var h = getDigitH(el);
+  if (!h) return; // not painted yet
+  // Force odo-col height so overflow:hidden clips to exactly 1 digit
+  el.querySelectorAll('.odo-col').forEach(function(col) {
+    col.style.height = h + 'px';
+  });
   bs.forEach(function(b, i) {
     var newD = parseInt(s[i]);
     var oldD = parseInt(b.dataset.value || 0);
@@ -442,7 +440,7 @@ function setDigits(el, num, animate) {
       b.style.marginTop  = (newD * -h) + 'px';
       b.dataset.value    = newD;
     } else if (oldD !== newD) {
-      b.dataset.value   = newD;
+      b.dataset.value    = newD;
       b.style.transition = 'margin-top .4s cubic-bezier(.75,.15,.6,1.15)';
       b.style.marginTop  = (newD * -h) + 'px';
       if (Math.abs(newD - oldD) > 3) {
