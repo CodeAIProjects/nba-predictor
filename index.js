@@ -910,9 +910,30 @@ app.get('/api/debug/odds', async (req, res) => {
 // Debug endpoint — test BDL PPG lookup for a player name
 app.get('/api/debug/teamstats', async (req, res) => {
   const abbr = (req.query.team || 'LAL').toUpperCase();
-  delete teamStatsCache[abbr];
-  const stats = await fetchTeamSeasonStats(abbr);
-  res.json({ abbr, stats });
+  const tid = ESPN_TEAM_IDS[abbr];
+  const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/schedule`;
+  const data = await safeFetch(url);
+  const events = data?.events || [];
+
+  // Show unique status values and first completed event
+  const statuses = [...new Set(events.map(e => e.competitions?.[0]?.status?.type?.name || e.status?.type?.name))];
+  const firstDone = events.find(e => {
+    const s = e.competitions?.[0]?.status?.type?.name || e.status?.type?.name || '';
+    return s.includes('FINAL') || s.includes('final') || s === 'post';
+  });
+  const comp = firstDone?.competitions?.[0];
+
+  res.json({
+    totalEvents: events.length,
+    uniqueStatuses: statuses,
+    firstDoneStatus: firstDone?.competitions?.[0]?.status?.type?.name || firstDone?.status?.type?.name,
+    firstDoneCompetitors: comp?.competitors?.map(c => ({
+      homeAway: c.homeAway,
+      scoreType: typeof c.score,
+      scoreValue: c.score,
+      abbr: c.team?.abbreviation,
+    })),
+  });
 });
 
 app.get('/api/debug/last5raw', async (req, res) => {
