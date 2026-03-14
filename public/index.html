@@ -414,12 +414,12 @@ function render(data) {
     '<th data-tip="Home team HOME game averages / Away team AWAY game averages this season.&#10;Green = scored, Red = conceded.&#10;Used for O/U cross-check analysis.">SEASONAL AVG<br>Home / Away</th>' +
     '<th data-tip="Same as Seasonal Avg but last 5 games only.&#10;More predictive than full season — captures current form and fatigue.&#10;Weighted 1.5x in O/U analysis.">LAST 5 AVG<br>Home / Away</th>' +
     '<th data-tip="Cross-check analysis:&#10;Home offense vs Away defense&#10;Away offense vs Home defense&#10;Season (1x) + L5 (1.5x) weighted.&#10;🔥🔥🔥 = all 4 signals agree with big edge">O/U ANALYSIS</th>' +
+    '<th data-tip="Current win/loss streak · Home streak · Away streak&#10;W3 = won last 3 · L2 = lost last 2&#10;Computed from season schedule">STREAK / RECORD<br>Stk · Home · Away</th>' +
     '<th data-tip="Spread = favourite must win by more than this number.&#10;O/U = combined score line.&#10;Source: DraftKings (Odds API) or ESPN fallback.">MARKET LINE<br>Spread · O/U</th>' +
     '<th data-tip="Back-to-back game flag.&#10;Teams on B2B played yesterday.&#10;B2B teams cover only ~40% of the time — factor into confidence.">B2B</th>' +
     '<th data-tip="Sharp money / line movement.&#10;Shows current line direction.&#10;Large spread = possible sharp action.">LINE MOVE</th>' +
     '<th data-tip="Overall difficulty rating based on injuries + B2B fatigue.&#10;✅ Clean · ⚠️ Verify first · 🚫 Avoid">DIFFICULTY</th>' +
     '<th data-tip="Model confidence in this pick.&#10;⭐⭐⭐⭐ Strong · ⭐⭐⭐ Standard · ⭐⭐ Lean only&#10;Factors in spread size, injuries, B2B.">CONF</th>' +
-    '<th data-tip="Current win/loss streak · Home streak · Away streak&#10;W3 = won last 3 · L2 = lost last 2&#10;Source: ESPN standings">STREAK / RECORD<br>Stk · Home · Away</th>' +
     '<th data-tip="Model picks with live result tracking.&#10;Score badge shows actual vs line difference.&#10;WIN PROB from ESPN live win probability.">KEY PICKS</th>' +
     '<th style="width:52px" data-tip="Click to expand 5 analysis panels:&#10;🩹 Injuries · 📋 H2H · 🏃 Pace/O·U&#10;⬛ Quarter Scores · 🧠 Reasoning">MORE</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>';
@@ -1040,6 +1040,7 @@ function renderRow(g, ev) {
     '<td>'+seasonAvgCell+'</td>' +
     '<td>'+l3AvgCell+'</td>' +
     '<td>'+totalAvgCell+'</td>' +
+    '<td>'+streakCell+'</td>' +
     '<td><div class="line-val" style="white-space:pre-line">'+(spread ? spreadFav+' -'+spread+(total ? '\nO/U '+total : '\nO/U —') : 'No odds\nyet')+'</div>'+(sourceLbl ? '<span class="line-src">via '+sourceLbl+'</span>' : '')+'</td>' +
     (function(){
       var hB2B = g.b2b && g.b2b.home;
@@ -1053,7 +1054,6 @@ function renderRow(g, ev) {
     '<td>'+lineMoveCell+'</td>' +
     '<td><div class="badge '+bc+'">'+stxt+'</div></td>' +
     '<td style="text-align:center"><div class="conf-stars">'+conf+'</div><div class="conf-lbl">'+clbl+'</div></td>' +
-    '<td>'+streakCell+'</td>' +
     '<td class="picks-cell">'+pickCells+'</td>' +
     '<td class="more-cell"><div class="more-btn" id="btn-'+accId+'" onclick="toggleAcc(\''+accId+'\')"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div></td>' +
     '</tr>' +
