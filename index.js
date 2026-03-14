@@ -493,9 +493,24 @@ async function pollToday() {
   }
 }
 
+async function pollLive() {
+  // Poll today always
+  await pollToday();
+  // Also re-poll any cached date that has live games (handles edge cases)
+  for (const [dateStr, cached] of Object.entries(cache)) {
+    if (dateStr === today()) continue;
+    if (cached?.games?.some(g => g.status === 'inprogress')) {
+      try {
+        const data = await assembleGameData(dateStr);
+        cache[dateStr] = data;
+      } catch(e) {}
+    }
+  }
+}
+
 // Start polling immediately then every 30s
-pollToday();
-setInterval(pollToday, 30000);
+pollLive();
+setInterval(pollLive, 30000);
 
 // ─── 7. API ROUTES ────────────────────────────────────────────────────────────
 
@@ -577,30 +592,22 @@ app.get('/api/debug/odds', async (req, res) => {
 app.get('/api/debug/ppg', async (req, res) => {
   const abbr = (req.query.team || 'LAL').toUpperCase();
   const tid = ESPN_TEAM_IDS[abbr];
+  const aid = '1966'; // LeBron James ESPN ID — known good player
 
-  // Step 1: get roster
-  const rUrl = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/roster`;
-  const rData = await safeFetch(rUrl);
-  const allAthletes = (rData?.athletes || []).flatMap(g => g.items || (g.id ? [g] : []));
-  const firstPlayer = allAthletes[0];
+  // Test 4 different ESPN endpoints for player stats
+  const urls = [
+    `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/athletes/${aid}`,
+    `https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/seasons/2026/athletes/${aid}/statistics/0`,
+    `https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/seasons/2026/athletes/${aid}/statistics`,
+    `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/athletes/${aid}/overview`,
+  ];
 
-  if (!firstPlayer) return res.json({ error: 'no athletes found', rosterKeys: rData ? Object.keys(rData) : null });
+  const results = await Promise.all(urls.map(async url => {
+    const d = await safeFetch(url);
+    return { url, keys: d ? Object.keys(d) : null, sample: d };
+  }));
 
-  // Step 2: test stats endpoint for first player
-  const aid = firstPlayer.id;
-  const name = firstPlayer.displayName;
-  const sUrl = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/athletes/${aid}/stats`;
-  const sd = await safeFetch(sUrl);
-
-  res.json({
-    abbr, tid,
-    athleteCount: allAthletes.length,
-    firstPlayer: { id: aid, name },
-    statsUrl: sUrl,
-    statsKeys: sd ? Object.keys(sd) : null,
-    splitCategories: sd?.splits?.categories?.map(c => ({ name: c.name, names: c.names?.slice(0,5), stats: c.stats?.slice(0,5) })) || null,
-    rawSample: sd,
-  });
+  res.json({ aid, results });
 });
 
 // GET /api/stats?days=30 — model performance
