@@ -450,19 +450,21 @@ var TEAM_AVG_PTS = {
 function teamAvg(abbr) { return TEAM_AVG_PTS[abbr] || 112; }
 
 function buildSeasonAvg(g) {
-  // Use lastFive home splits for home team, away splits for away team
-  var l5h = g.lastFive && g.lastFive[g.home];
-  var l5a = g.lastFive && g.lastFive[g.away];
+  var ss  = g.seasonStats || {};
+  var ssh = ss[g.home];  // home team's full season stats
+  var ssa = ss[g.away];  // away team's full season stats
 
-  // Home team — use their HOME game averages from L5
-  var hSplit = l5h && l5h.home && l5h.home.games > 0 ? l5h.home : null;
+  // Home team: their HOME game season averages
+  var hSplit    = ssh && ssh.home && ssh.home.games > 0 ? ssh.home : null;
   var hScored   = hSplit ? hSplit.scored   : teamAvg(g.home).toFixed(1);
   var hConceded = hSplit ? hSplit.conceded : null;
+  var hGames    = hSplit ? ' ('+hSplit.games+'G)' : '';
 
-  // Away team — use their AWAY game averages from L5
-  var aSplit = l5a && l5a.away && l5a.away.games > 0 ? l5a.away : null;
+  // Away team: their AWAY game season averages
+  var aSplit    = ssa && ssa.away && ssa.away.games > 0 ? ssa.away : null;
   var aScored   = aSplit ? aSplit.scored   : teamAvg(g.away).toFixed(1);
   var aConceded = aSplit ? aSplit.conceded : null;
+  var aGames    = aSplit ? ' ('+aSplit.games+'G)' : '';
 
   var hLine = hConceded
     ? '<span style="color:var(--green)">'+hScored+'</span> <span style="color:var(--muted)">sc</span> / <span style="color:var(--red)">'+hConceded+'</span> <span style="color:var(--muted)">con</span>'
@@ -471,28 +473,26 @@ function buildSeasonAvg(g) {
     ? '<span style="color:var(--green)">'+aScored+'</span> <span style="color:var(--muted)">sc</span> / <span style="color:var(--red)">'+aConceded+'</span> <span style="color:var(--muted)">con</span>'
     : aScored+' pts';
 
-  return '<div class="sl">'+g.home+' HOME GAMES</div><div class="sv">'+hLine+'</div>' +
-         '<div class="sl" style="margin-top:3px">'+g.away+' AWAY GAMES</div><div class="sv">'+aLine+'</div>';
+  return '<div class="sl">'+g.home+' HOME'+hGames+'</div><div class="sv">'+hLine+'</div>' +
+         '<div class="sl" style="margin-top:3px">'+g.away+' AWAY'+aGames+'</div><div class="sv">'+aLine+'</div>';
 }
 
 function buildL3Avg(g) {
-  var l5h = g.lastFive && g.lastFive[g.home];
-  var l5a = g.lastFive && g.lastFive[g.away];
+  var ss  = g.seasonStats || {};
+  var ssh = ss[g.home];
+  var ssa = ss[g.away];
 
-  function fmtL3(team, l5, isHome) {
-    if (!l5) return '<div class="sl">'+team+' L5</div><div class="sv">—</div>';
-    // For L3: use all-game avg from last 5 (best we have without more API calls)
-    var split = isHome ? l5.all : l5.all;
-    var scored   = split && split.scored   ? split.scored   : null;
-    var conceded = split && split.conceded ? split.conceded : null;
-    var rec = l5.wins+'W-'+l5.losses+'L';
-    var line = scored
-      ? '<span style="color:var(--green)">'+scored+'</span> <span style="color:var(--muted)">sc</span> / <span style="color:var(--red)">'+conceded+'</span> <span style="color:var(--muted)">con</span>'
-      : rec;
-    return '<div class="sl">'+team+' LAST 5</div><div class="sv">'+line+'</div>';
+  function fmtL5(team, stats, useHome) {
+    // Use last5 of home games for home team, last5 of away games for away team
+    var split = stats && (useHome ? stats.home : stats.away);
+    var scored   = split && split.last5scored   ? split.last5scored   : null;
+    var conceded = split && split.last5conceded ? split.last5conceded : null;
+    if (!scored) return '<div class="sl">'+team+' L5 '+(useHome?'HOME':'AWAY')+'</div><div class="sv" style="color:var(--muted)">—</div>';
+    var line = '<span style="color:var(--green)">'+scored+'</span> <span style="color:var(--muted)">sc</span> / <span style="color:var(--red)">'+conceded+'</span> <span style="color:var(--muted)">con</span>';
+    return '<div class="sl">'+team+' L5 '+(useHome?'HOME':'AWAY')+'</div><div class="sv">'+line+'</div>';
   }
 
-  return fmtL3(g.home, l5h, true) + fmtL3(g.away, l5a, false);
+  return fmtL5(g.home, ssh, true) + fmtL5(g.away, ssa, false);
 }
 
 function buildTotalAvg(g) {
