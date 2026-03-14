@@ -450,27 +450,45 @@ var TEAM_AVG_PTS = {
 function teamAvg(abbr) { return TEAM_AVG_PTS[abbr] || 112; }
 
 function buildSeasonAvg(g) {
-  // Season avg pts scored (hardcoded 2025-26). Allowed = approx league avg.
-  var hScored  = teamAvg(g.home).toFixed(1);
-  var aScored  = teamAvg(g.away).toFixed(1);
-  // Defensive avg not in our data yet — show scored only with label
-  return '<div class="sl">HOME</div><div class="sv">'+hScored+' pts</div>' +
-         '<div class="sl" style="margin-top:3px">AWAY</div><div class="sv">'+aScored+' pts</div>';
+  // Use lastFive home splits for home team, away splits for away team
+  var l5h = g.lastFive && g.lastFive[g.home];
+  var l5a = g.lastFive && g.lastFive[g.away];
+
+  // Home team — use their HOME game averages from L5
+  var hSplit = l5h && l5h.home && l5h.home.games > 0 ? l5h.home : null;
+  var hScored  = hSplit ? hSplit.scored  : teamAvg(g.home).toFixed(1);
+  var hAllowed = hSplit ? hSplit.allowed : null;
+  var hGames   = hSplit ? '('+hSplit.games+' HG)' : '(season)';
+
+  // Away team — use their AWAY game averages from L5
+  var aSplit = l5a && l5a.away && l5a.away.games > 0 ? l5a.away : null;
+  var aScored  = aSplit ? aSplit.scored  : teamAvg(g.away).toFixed(1);
+  var aAllowed = aSplit ? aSplit.allowed : null;
+  var aGames   = aSplit ? '('+aSplit.games+' AG)' : '(season)';
+
+  var hLine = hAllowed ? hScored+' / '+hAllowed : hScored+' pts';
+  var aLine = aAllowed ? aScored+' / '+aAllowed : aScored+' pts';
+
+  return '<div class="sl">'+g.home+' HOME '+hGames+'</div><div class="sv">'+hLine+'</div>' +
+         '<div class="sl" style="margin-top:3px">'+g.away+' AWAY '+aGames+'</div><div class="sv">'+aLine+'</div>';
 }
 
 function buildL3Avg(g) {
   var l5h = g.lastFive && g.lastFive[g.home];
   var l5a = g.lastFive && g.lastFive[g.away];
 
-  function fmtL5(team, l5) {
+  function fmtL3(team, l5, isHome) {
     if (!l5) return '<div class="sl">'+team+' L5</div><div class="sv">—</div>';
-    var scored  = l5.avgScored  ? l5.avgScored  + ' pts' : (l5.wins + 'W-' + l5.losses + 'L');
-    var allowed = l5.avgAllowed ? l5.avgAllowed + ' all' : '';
-    var txt = l5.avgScored ? scored + (allowed ? ' / ' + allowed : '') : scored;
-    return '<div class="sl">'+team+' L5</div><div class="sv">'+txt+'</div>';
+    // For L3: use all-game avg from last 5 (best we have without more API calls)
+    var split = isHome ? l5.all : l5.all;
+    var scored  = split && split.scored  ? split.scored  : '—';
+    var allowed = split && split.allowed ? split.allowed : '—';
+    var rec = l5.wins+'W-'+l5.losses+'L';
+    var line = scored !== '—' ? scored+' / '+allowed : rec;
+    return '<div class="sl">'+team+' L5 ('+rec+')</div><div class="sv">'+line+'</div>';
   }
 
-  return fmtL5(g.home, l5h) + fmtL5(g.away, l5a);
+  return fmtL3(g.home, l5h, true) + fmtL3(g.away, l5a, false);
 }
 
 function buildTotalAvg(g) {
