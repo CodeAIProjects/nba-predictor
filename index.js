@@ -884,7 +884,7 @@ app.get('/api/data', async (req, res) => {
 app.get('/api/dates', async (req, res) => {
   const dates = [];
   const now = new Date();
-  for (let i = -7; i <= 7; i++) {
+  for (let i = -4; i <= 4; i++) {
     const d = new Date(now);
     d.setDate(d.getDate() + i);
     dates.push(d.toISOString().slice(0, 10));
