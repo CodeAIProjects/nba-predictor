@@ -289,6 +289,86 @@ async function fetchGameSummary(espnId, status) {
   return parsed;
 }
 
+// ─── 1c. ESPN TEAM SEASON STATS (schedule-based, works for any date) ────────
+// Cache per team — refresh every 6 hours
+const teamStatsCache = {}; // { "LAL": { fetchedAt, home: {scored,conceded,games}, away: {...}, all: {...} } }
+const TEAM_STATS_TTL = 6 * 60 * 60 * 1000; // 6 hours
+
+async function fetchTeamSeasonStats(abbr) {
+  const c = teamStatsCache[abbr];
+  if (c && Date.now() - c.fetchedAt < TEAM_STATS_TTL) return c;
+
+  const tid = ESPN_TEAM_IDS[abbr];
+  if (!tid) return null;
+
+  // ESPN team schedule — full season with scores
+  const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/schedule`;
+  const data = await safeFetch(url);
+  if (!data?.events?.length) return null;
+
+  const home = { scored: [], conceded: [] };
+  const away = { scored: [], conceded: [] };
+
+  for (const ev of data.events) {
+    const status = ev.status?.type?.name;
+    if (status !== 'STATUS_FINAL') continue; // only completed games
+
+    const comp = ev.competitions?.[0];
+    if (!comp) continue;
+
+    const teamComp = comp.competitors?.find(c =>
+      c.team?.abbreviation === abbr ||
+      c.team?.abbreviation === abbr.replace('NYK','NY').replace('GSW','GS').replace('SAS','SA').replace('NOP','NO').replace('WAS','WSH')
+    );
+    const oppComp = comp.competitors?.find(c => c !== teamComp);
+    if (!teamComp || !oppComp) continue;
+
+    const scored   = parseInt(teamComp.score || 0);
+    const conceded = parseInt(oppComp.score  || 0);
+    if (!scored || !conceded) continue;
+
+    if (teamComp.homeAway === 'home') {
+      home.scored.push(scored);
+      home.conceded.push(conceded);
+    } else {
+      away.scored.push(scored);
+      away.conceded.push(conceded);
+    }
+  }
+
+  function avg(arr) { return arr.length ? (arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1) : null; }
+  function last5(arr) { return arr.slice(-5); }
+
+  const result = {
+    fetchedAt: Date.now(),
+    abbr,
+    home: {
+      scored:   avg(home.scored),
+      conceded: avg(home.conceded),
+      games:    home.scored.length,
+      // Last 5 home games
+      last5scored:   avg(last5(home.scored)),
+      last5conceded: avg(last5(home.conceded)),
+    },
+    away: {
+      scored:   avg(away.scored),
+      conceded: avg(away.conceded),
+      games:    away.scored.length,
+      last5scored:   avg(last5(away.scored)),
+      last5conceded: avg(last5(away.conceded)),
+    },
+    all: {
+      scored:   avg([...home.scored, ...away.scored]),
+      conceded: avg([...home.conceded, ...away.conceded]),
+      games:    home.scored.length + away.scored.length,
+    },
+  };
+
+  teamStatsCache[abbr] = result;
+  console.log(`[team stats] ${abbr}: ${result.home.games}H/${result.away.games}A games loaded`);
+  return result;
+}
+
 // ─── 2. ESPN INJURIES (per team) ──────────────────────────────────────────────
 // ESPN team IDs for the 30 teams
 const ESPN_TEAM_IDS = {
@@ -543,10 +623,16 @@ async function assembleGameData(dateStr) {
   // Collect unique teams playing today
   const teams = [...new Set(games.flatMap(g => [g.home, g.away]))];
 
-  // Fetch injuries with caching (won't hammer ESPN every 30s)
-  const injuryMap = {};
+  // Fetch injuries + season stats in parallel
+  const injuryMap  = {};
+  const seasonStats = {};
   await Promise.all(teams.map(async t => {
-    injuryMap[t] = await getCachedInjuries(t);
+    const [inj, stats] = await Promise.all([
+      getCachedInjuries(t),
+      fetchTeamSeasonStats(t),
+    ]);
+    injuryMap[t]  = inj;
+    seasonStats[t] = stats;
   }));
 
   // Fetch summaries for all games in parallel (PPG, odds, H2H, quarters, leaders)
@@ -602,7 +688,12 @@ async function assembleGameData(dateStr) {
         [game.home]: addPct(homeInj, game.home),
         [game.away]: addPct(awayInj, game.away),
       },
-      // New rich data from ESPN summary
+      // Season stats from team schedule (works for any date)
+      seasonStats: {
+        [game.home]: seasonStats[game.home] || null,
+        [game.away]: seasonStats[game.away] || null,
+      },
+      // Rich data from ESPN summary (today's games only)
       qtrScores:  sum?.qtrScores  || null,
       leaders:    sum?.leaders    || null,
       h2h:        sum?.h2h        || null,
@@ -816,6 +907,13 @@ app.get('/api/debug/odds', async (req, res) => {
 });
 
 // Debug endpoint — test BDL PPG lookup for a player name
+app.get('/api/debug/teamstats', async (req, res) => {
+  const abbr = (req.query.team || 'LAL').toUpperCase();
+  delete teamStatsCache[abbr]; // force fresh fetch
+  const stats = await fetchTeamSeasonStats(abbr);
+  res.json({ abbr, stats });
+});
+
 app.get('/api/debug/last5raw', async (req, res) => {
   // Force-fetch a specific game summary and parse lastFive with new logic
   const gameId = req.query.id || '401810824';
