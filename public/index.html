@@ -915,31 +915,23 @@ function buildStreakCell(g) {
   var sh = g.streaks && g.streaks[g.home];
   var sa = g.streaks && g.streaks[g.away];
 
-  function streakBadge(val) {
+  function sb(val) {
     if (!val) return '<span style="color:var(--muted)">—</span>';
-    var isWin = val.toString().toUpperCase().startsWith('W');
-    var col = isWin ? 'var(--green)' : 'var(--red)';
-    return '<span style="color:'+col+';font-weight:700">'+val+'</span>';
-  }
-
-  function recordBadge(val) {
-    if (!val) return '<span style="color:var(--muted)">—</span>';
-    var parts = val.split('-');
-    if (parts.length === 2) {
-      return '<span style="color:var(--green);font-weight:600">'+parts[0]+'</span>'+
-             '<span style="color:var(--muted)">-</span>'+
-             '<span style="color:var(--red);font-weight:600">'+parts[1]+'</span>';
-    }
-    return '<span style="color:var(--text2)">'+val+'</span>';
+    var w = val.toString().toUpperCase().startsWith('W');
+    return '<span style="color:'+(w?'var(--green)':'var(--red)')+';font-weight:700">'+val+'</span>';
   }
 
   function teamRow(team, s) {
-    if (!s) return '<div style="font-size:.62rem;color:var(--muted);margin-bottom:2px">'+team+' —</div>';
-    return '<div style="font-size:.65rem;margin-bottom:4px;line-height:1.5">'+
-      '<span style="color:var(--gold);font-weight:700;font-size:.6rem">'+team+'</span><br>'+
-      '<span style="color:var(--muted);font-size:.55rem">STK </span>'+streakBadge(s.current)+
-      ' <span style="color:var(--muted);font-size:.55rem">H </span>'+recordBadge(s.home)+
-      ' <span style="color:var(--muted);font-size:.55rem">A </span>'+recordBadge(s.away)+
+    if (!s) return '<div style="margin-bottom:5px"><div style="font-size:.6rem;color:var(--gold);font-weight:700;letter-spacing:.5px">'+team+'</div><div style="font-size:.68rem;color:var(--muted)">—</div></div>';
+    return '<div style="margin-bottom:6px;line-height:1.5">'+
+      '<div style="font-size:.6rem;color:var(--gold);font-weight:700;letter-spacing:.5px;margin-bottom:1px">'+team+'</div>'+
+      '<div style="font-size:.72rem">'+
+        '<span style="color:var(--muted);font-size:.55rem">STK </span>'+sb(s.current)+
+      '</div>'+
+      '<div style="font-size:.65rem">'+
+        '<span style="color:var(--muted);font-size:.55rem">H </span>'+sb(s.home)+
+        '<span style="color:var(--muted);font-size:.55rem"> A </span>'+sb(s.away)+
+      '</div>'+
     '</div>';
   }
 
