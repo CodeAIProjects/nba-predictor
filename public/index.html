@@ -430,6 +430,7 @@ function render(data) {
     '<th data-tip="Same as Seasonal Avg but last 5 games only.&#10;More predictive than full season — captures current form and fatigue.&#10;Weighted 1.5x in O/U analysis.">LAST 5 AVG<br>Home / Away</th>' +
     '<th data-tip="Cross-check analysis:&#10;Home offense vs Away defense&#10;Away offense vs Home defense&#10;Season (1x) + L5 (1.5x) weighted.&#10;🔥🔥🔥 = all 4 signals agree with big edge">O/U ANALYSIS</th>' +
     '<th data-tip="Current win/loss streak · Home streak · Away streak&#10;W3 = won last 3 · L2 = lost last 2&#10;Computed from season schedule">STREAK / RECORD<br>Stk · Home · Away</th>' +
+    '<th data-tip="How often each team\'s games go OVER or UNDER the current O/U line.&#10;Last 10 games vs full season.&#10;Green = heavy OVER · Red = heavy UNDER">O/U RECORD<br>vs Line</th>' +
     '<th data-tip="Spread = favourite must win by more than this number.&#10;O/U = combined score line.&#10;Source: DraftKings (Odds API) or ESPN fallback.">MARKET LINE<br>Spread · O/U</th>' +
     '<th data-tip="Back-to-back game flag.&#10;Teams on B2B played yesterday.&#10;B2B teams cover only ~40% of the time — factor into confidence.">B2B</th>' +
     '<th data-tip="Sharp money / line movement.&#10;Shows current line direction.&#10;Large spread = possible sharp action.">LINE MOVE</th>' +
@@ -953,6 +954,52 @@ function buildStreakCell(g) {
   return teamRow(g.home, sh) + teamRow(g.away, sa);
 }
 
+
+function buildOURecordCell(g) {
+  var ouRec = g.ouRecord;
+  if (!ouRec || !ouRec.line) {
+    return '<div style="color:var(--muted);font-size:.65rem">No odds</div>';
+  }
+
+  function recRow(r, label) {
+    if (!r || !r.games) return '';
+    var overPct  = Math.round(r.over  / r.games * 100);
+    var underPct = Math.round(r.under / r.games * 100);
+    var overCol  = overPct >= 60 ? 'var(--green)' : overPct <= 35 ? 'var(--red)' : 'var(--muted)';
+    var undrCol  = underPct >= 60 ? 'var(--green)' : underPct <= 35 ? 'var(--red)' : 'var(--muted)';
+    // Bar
+    var barOver  = Math.round(r.over  / r.games * 100);
+    var barUnder = Math.round(r.under / r.games * 100);
+    return '<div style="margin-bottom:2px">'+
+      '<span style="font-size:.52rem;color:var(--muted);letter-spacing:.3px">'+label+' </span>'+
+      '<span style="font-weight:700;font-size:.66rem;color:'+overCol+'">O'+r.over+'</span>'+
+      '<span style="color:var(--muted);font-size:.6rem">/</span>'+
+      '<span style="font-weight:700;font-size:.66rem;color:'+undrCol+'">U'+r.under+'</span>'+
+      (r.push ? '<span style="color:var(--muted);font-size:.55rem"> P'+r.push+'</span>' : '')+
+      // mini bar
+      '<div style="width:100%;height:3px;background:rgba(255,255,255,.07);border-radius:2px;margin-top:1px;overflow:hidden;display:flex">'+
+        '<div style="width:'+barOver+'%;background:var(--green);opacity:.7"></div>'+
+        '<div style="width:'+barUnder+'%;background:var(--red);opacity:.7;margin-left:auto"></div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  function teamBlock(team, rec) {
+    if (!rec) return '';
+    return '<div style="margin-bottom:5px">'+
+      '<div style="font-size:.58rem;color:var(--gold);font-weight:700;letter-spacing:.5px;margin-bottom:2px">'+team+'</div>'+
+      recRow(rec.last10, 'L10')+
+      recRow(rec.season,  'SZN')+
+    '</div>';
+  }
+
+  return '<div style="font-size:.6rem;line-height:1.4">'+
+    '<div style="font-size:.52rem;color:var(--muted);letter-spacing:.5px;margin-bottom:3px">vs O/U '+ouRec.line+'</div>'+
+    teamBlock(g.home, ouRec.home)+
+    teamBlock(g.away, ouRec.away)+
+  '</div>';
+}
+
 function renderRow(g, ev) {
   var picks=ev.picks, spreadFav=ev.spreadFav, spread=ev.spread, total=ev.total, ouPick=ev.ouPick;
   var status=ev.status, stxt=ev.stxt, conf=ev.conf, clbl=ev.clbl, det=ev.det, homeOut=ev.homeOut, awayOut=ev.awayOut;
@@ -1089,6 +1136,7 @@ function renderRow(g, ev) {
   var totalAvgCell  = buildOUAnalysis(g);
   var lineMoveCell  = buildLineMoveCell(g);
   var streakCell    = buildStreakCell(g);
+  var ouRecordCell  = buildOURecordCell(g);
   var pickCells = picks.map(function(p) {
     var pu=p.toUpperCase(), isOU=(pu.indexOf('OVER')>=0||pu.indexOf('UNDER')>=0);
     var r = isOU ? det.ouR : det.spreadR;
@@ -1102,6 +1150,7 @@ function renderRow(g, ev) {
     '<td>'+l3AvgCell+'</td>' +
     '<td>'+totalAvgCell+'</td>' +
     '<td>'+streakCell+'</td>' +
+    '<td>'+ouRecordCell+'</td>' +
     '<td><div class="line-val" style="white-space:pre-line">'+(spread ? spreadFav+' -'+spread+(total ? '\nO/U '+total : '\nO/U —') : 'No odds\nyet')+'</div>'+(sourceLbl ? '<span class="line-src">via '+sourceLbl+'</span>' : '')+'</td>' +
     (function(){
       var hB2B = g.b2b && g.b2b.home;
@@ -1118,7 +1167,7 @@ function renderRow(g, ev) {
     '<td class="picks-cell">'+pickCells+'</td>' +
     '<td class="more-cell"><div class="more-btn" id="btn-'+accId+'" onclick="toggleAcc(\''+accId+'\')"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div></td>' +
     '</tr>' +
-    '<tr class="acc-row closed" id="'+accId+'"><td colspan="11"><div class="acc-inner">' +
+    '<tr class="acc-row closed" id="'+accId+'"><td colspan="12"><div class="acc-inner">' +
       '<div class="acc-card"><div class="acc-card-title">🩹 Injuries & Impact</div>'+injHtml+'</div>' +
       '<div class="acc-card"><div class="acc-card-title">📋 H2H History</div>' + buildH2H(g) + '</div>' +
       '<div class="acc-card"><div class="acc-card-title">🏃 Pace / O·U Lean</div>' + buildPaceLean(g, ouPick, total) + '</div>' +
