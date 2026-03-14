@@ -1007,9 +1007,9 @@ app.get('/api/dates', async (req, res) => {
 
   // Check cache first, then fetch counts in parallel (lightweight)
   const results = await Promise.all(dates.map(async dateStr => {
-    if (cache[dateStr]) return { date: dateStr, count: cache[dateStr].games.length };
+    if (cache[dateStr]?.games?.length > 0) return { date: dateStr, count: cache[dateStr].games.length };
     const espnDate = toESPNDate(dateStr);
-    const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${espnDate}&limit=1`;
+    const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${espnDate}&limit=20`;
     const data = await safeFetch(url);
     return { date: dateStr, count: data?.events?.length || 0 };
   }));
