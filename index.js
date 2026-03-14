@@ -409,6 +409,7 @@ async function fetchTeamSeasonStats(abbr) {
       scored:   avg(home.scored),
       conceded: avg(home.conceded),
       games:    home.scored.length,
+      wins:     homeGames.filter(g => g.win).length,
       last5scored:   avg(last5(home.scored)),
       last5conceded: avg(last5(home.conceded)),
     },
@@ -416,6 +417,7 @@ async function fetchTeamSeasonStats(abbr) {
       scored:   avg(away.scored),
       conceded: avg(away.conceded),
       games:    away.scored.length,
+      wins:     awayGames.filter(g => g.win).length,
       last5scored:   avg(last5(away.scored)),
       last5conceded: avg(last5(away.conceded)),
     },
@@ -423,6 +425,7 @@ async function fetchTeamSeasonStats(abbr) {
       scored:   avg([...home.scored, ...away.scored]),
       conceded: avg([...home.conceded, ...away.conceded]),
       games:    home.scored.length + away.scored.length,
+      wins:     allGames.filter(g => g.win).length,
     },
     // Raw totals for O/U hit rate calculation
     gameTotals: gameResults.map(g => g.total),
