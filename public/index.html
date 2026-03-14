@@ -23,7 +23,7 @@
   .dot.r{background:var(--red)}.dot.g{background:var(--green)}.dot.y{background:var(--yellow)}
   @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
   .refresh-info{font-size:.64rem;color:var(--muted);font-family:"DM Mono",monospace}
-  #last-updated,#next-refresh{color:var(--cyan)}
+  #last-updated{color:var(--cyan)}
   .date-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:57px;z-index:95}
   .date-label{font-family:"DM Mono",monospace;font-size:.6rem;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;white-space:nowrap}
   .date-scroll{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;flex:1}
@@ -316,10 +316,8 @@ function selectDate(ds) {
 function startRefresh(ds) {
   var interval = isLiveMode ? 10 : 30;
   countdownVal = interval;
-  document.getElementById('next-refresh').textContent = interval + 's';
   countdownInt = setInterval(function() {
     countdownVal--;
-    document.getElementById('next-refresh').textContent = countdownVal + 's';
     if (countdownVal <= 0) countdownVal = isLiveMode ? 10 : 30;
   }, 1000);
   refreshTimer = setInterval(function() {
