@@ -95,7 +95,7 @@ function toESPNDate(dateStr) {
 // ─── 1. ESPN SCOREBOARD ───────────────────────────────────────────────────────
 async function fetchScores(dateStr) {
   const d = toESPNDate(dateStr);
-  const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${d}&limit=20`;
+  const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${d}&limit=20&groups=50`;
   const data = await safeFetch(url);
   if (!data?.events) return [];
 
@@ -543,46 +543,55 @@ async function fetchTeamRosterPPG(abbr) {
   const tid = ESPN_TEAM_IDS[abbr];
   if (!tid) return {};
 
-  // Step 1: get roster to collect athlete IDs + names
-  const rosterUrl = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/roster`;
-  const rData = await safeFetch(rosterUrl);
-  if (!rData?.athletes?.length) return {};
+  try {
+    // ESPN team stats endpoint — returns all player averages for the team in one call
+    const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/statistics`;
+    const data = await safeFetch(url);
+    const roster = {};
 
-  // Flatten athlete groups (ESPN returns [{items:[...]}, ...] or flat array)
-  const allAthletes = rData.athletes.flatMap(g => g.items || (g.id ? [g] : []));
-  if (!allAthletes.length) return {};
+    // Also try the roster endpoint as a source of athlete IDs
+    const rosterUrl = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${tid}/roster`;
+    const rData = await safeFetch(rosterUrl);
+    const athletes = (rData?.athletes || []).flatMap(g => g.items || (g.id ? [g] : []));
 
-  // Step 2: fetch each player's season stats from ESPN athlete stats endpoint
-  // Limit to 13 players to avoid too many requests
-  const roster = {};
-  await Promise.all(allAthletes.slice(0, 13).map(async a => {
-    const name = a.displayName || a.fullName;
-    const aid  = a.id;
-    if (!name || !aid) return;
-    try {
-      const sUrl = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/athletes/${aid}/stats`;
-      const sd = await safeFetch(sUrl);
-      // Look for avgPoints in splits categories
-      const cats = sd?.splits?.categories || [];
-      for (const cat of cats) {
-        const idx = (cat.names || []).indexOf('avgPoints');
-        if (idx >= 0 && cat.stats?.[idx] != null) {
-          roster[name] = parseFloat(cat.stats[idx]);
-          return;
-        }
-        // Also try abbreviations
-        const idx2 = (cat.abbreviations || []).indexOf('PTS');
-        if (idx2 >= 0 && cat.stats?.[idx2] != null) {
-          roster[name] = parseFloat(cat.stats[idx2]);
-          return;
-        }
-      }
-    } catch(e) {}
-  }));
+    if (athletes.length > 0) {
+      // Fetch stats in batches of 5 to avoid hammering ESPN
+      const batch = athletes.slice(0, 15);
+      await Promise.all(batch.map(async a => {
+        const name = a.displayName || a.fullName;
+        const aid  = a.id;
+        if (!name || !aid) return;
+        try {
+          // Try the athlete statistics endpoint with season param
+          const sUrl = `https://sports.core.api.espn.com/v2/sports/basketball/leagues/nba/seasons/2026/types/2/athletes/${aid}/statistics/0`;
+          const sd = await safeFetch(sUrl);
+          // Look in splits for avgPoints
+          const splits = sd?.splits?.categories || [];
+          for (const cat of splits) {
+            const names = cat.names || cat.abbreviations || [];
+            const idx = names.findIndex(n => n === 'avgPoints' || n === 'PTS' || n === 'pts');
+            if (idx >= 0) {
+              const val = parseFloat(cat.stats?.[idx]);
+              if (val > 0) { roster[name] = val; return; }
+            }
+          }
+          // Fallback: try simple stats array
+          if (sd?.stats) {
+            const ptsStat = sd.stats.find(s => s.name === 'avgPoints' || s.abbreviation === 'PTS');
+            if (ptsStat?.value > 0) roster[name] = parseFloat(ptsStat.value);
+          }
+        } catch(e) {}
+      }));
+    }
 
-  console.log('[roster ppg] ' + abbr + ' => ' + Object.keys(roster).length + ' players with stats');
-  rosterCache[abbr] = roster;
-  return roster;
+    console.log('[roster ppg] ' + abbr + ' => ' + Object.keys(roster).length + ' players with stats');
+    rosterCache[abbr] = roster;
+    return roster;
+  } catch(e) {
+    console.error('[roster ppg error]', abbr, e.message);
+    rosterCache[abbr] = {};
+    return {};
+  }
 }
 
 async function enrichInjuriesWithPPG(abbr, players) {
@@ -1009,7 +1018,7 @@ app.get('/api/dates', async (req, res) => {
   const results = await Promise.all(dates.map(async dateStr => {
     if (cache[dateStr]?.games?.length > 0) return { date: dateStr, count: cache[dateStr].games.length };
     const espnDate = toESPNDate(dateStr);
-    const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${espnDate}&limit=20`;
+    const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${espnDate}&limit=20&groups=50`;
     const data = await safeFetch(url);
     return { date: dateStr, count: data?.events?.length || 0 };
   }));
