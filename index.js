@@ -805,7 +805,19 @@ app.get('/api/debug/last5', async (req, res) => {
   const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${gameId}`;
   const data = await safeFetch(url);
   const l5 = data?.lastFiveGames || [];
-  res.json({ gameId, teamCount: l5.length, sample: l5[0] });
+  const team0 = l5[0];
+  const event0 = team0?.events?.[0];
+  res.json({
+    gameId,
+    teamCount: l5.length,
+    teamAbbr: team0?.team?.abbreviation,
+    eventCount: team0?.events?.length,
+    // Show ALL keys of first event so we can find score fields
+    firstEventKeys: event0 ? Object.keys(event0) : null,
+    firstEventRaw: event0,
+    // Show all 5 events with every field
+    allEvents: team0?.events?.map(e => Object.assign({}, e)),
+  });
 });
 
 app.get('/api/debug/ppg', async (req, res) => {
