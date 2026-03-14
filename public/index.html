@@ -419,6 +419,7 @@ function render(data) {
     '<th data-tip="Sharp money / line movement.&#10;Shows current line direction.&#10;Large spread = possible sharp action.">LINE MOVE</th>' +
     '<th data-tip="Overall difficulty rating based on injuries + B2B fatigue.&#10;✅ Clean · ⚠️ Verify first · 🚫 Avoid">DIFFICULTY</th>' +
     '<th data-tip="Model confidence in this pick.&#10;⭐⭐⭐⭐ Strong · ⭐⭐⭐ Standard · ⭐⭐ Lean only&#10;Factors in spread size, injuries, B2B.">CONF</th>' +
+    '<th data-tip="Current win/loss streak · Home streak · Away streak&#10;W3 = won last 3 · L2 = lost last 2&#10;Source: ESPN standings">STREAKS<br>Cur · Home · Away</th>' +
     '<th data-tip="Model picks with live result tracking.&#10;Score badge shows actual vs line difference.&#10;WIN PROB from ESPN live win probability.">KEY PICKS</th>' +
     '<th style="width:52px" data-tip="Click to expand 5 analysis panels:&#10;🩹 Injuries · 📋 H2H · 🏃 Pace/O·U&#10;⬛ Quarter Scores · 🧠 Reasoning">MORE</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>';
@@ -910,6 +911,25 @@ function triggerZoom(el) {
 }
 
 
+function buildStreakCell(g) {
+  var sh = g.streaks && g.streaks[g.home];
+  var sa = g.streaks && g.streaks[g.away];
+  function streakBadge(val, lbl) {
+    if (!val) return '<span style="color:var(--muted)">—</span>';
+    var isWin = val.toString().toUpperCase().startsWith('W');
+    var col = isWin ? 'var(--green)' : 'var(--red)';
+    return '<span style="color:'+col+';font-weight:700">'+val+'</span><span style="color:var(--muted);font-size:.55rem"> '+lbl+'</span>';
+  }
+  function teamRow(team, s) {
+    if (!s) return '<div style="font-size:.62rem;color:var(--muted)">'+team+': —</div>';
+    return '<div style="font-size:.65rem;margin-bottom:3px">'+
+      '<span style="color:var(--text2);font-size:.58rem">'+team+'</span> '+
+      streakBadge(s.current,'cur')+' '+streakBadge(s.home,'H')+' '+streakBadge(s.away,'A')+
+    '</div>';
+  }
+  return '<div style="line-height:1.6">'+teamRow(g.home, sh)+teamRow(g.away, sa)+'</div>';
+}
+
 function renderRow(g, ev) {
   var picks=ev.picks, spreadFav=ev.spreadFav, spread=ev.spread, total=ev.total, ouPick=ev.ouPick;
   var status=ev.status, stxt=ev.stxt, conf=ev.conf, clbl=ev.clbl, det=ev.det, homeOut=ev.homeOut, awayOut=ev.awayOut;
@@ -991,6 +1011,7 @@ function renderRow(g, ev) {
   var l3AvgCell     = buildL3Avg(g);
   var totalAvgCell  = buildOUAnalysis(g);
   var lineMoveCell  = buildLineMoveCell(g);
+  var streakCell    = buildStreakCell(g);
   var pickCells = picks.map(function(p) {
     var pu=p.toUpperCase(), isOU=(pu.indexOf('OVER')>=0||pu.indexOf('UNDER')>=0);
     var r = isOU ? det.ouR : det.spreadR;
@@ -1017,6 +1038,7 @@ function renderRow(g, ev) {
     '<td><div class="badge '+bc+'">'+stxt+'</div></td>' +
     '<td style="text-align:center"><div class="conf-stars">'+conf+'</div><div class="conf-lbl">'+clbl+'</div></td>' +
     '<td class="picks-cell">'+pickCells+'</td>' +
+    '<td>'+streakCell+'</td>' +
     '<td class="more-cell"><div class="more-btn" id="btn-'+accId+'" onclick="toggleAcc(\''+accId+'\')"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div></td>' +
     '</tr>' +
     '<tr class="acc-row closed" id="'+accId+'"><td colspan="11"><div class="acc-inner">' +
