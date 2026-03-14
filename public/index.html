@@ -121,12 +121,39 @@
   .state-title{font-size:.85rem;letter-spacing:2px;color:var(--text2);margin-bottom:6px}
   .state-sub{font-size:.7rem;color:var(--muted)}
   .loading-ball{font-size:3rem;display:inline-block;animation:spin .9s linear infinite}
-  /* ── Odometer score display ── */
-  .snum{display:inline-flex;gap:1px;align-items:center;font-variant-numeric:tabular-nums}
-  .snum.lead{color:var(--cyan)}
-  .odo-digit{display:inline-block;overflow:hidden;height:1.2em;line-height:1.2em;vertical-align:middle}
-  .odo-reel{display:flex;flex-direction:column;transition:transform .35s cubic-bezier(.22,.68,0,1.1)}
-  .odo-reel span{display:block;height:1.2em;line-height:1.2em;text-align:center}
+  /* ── Odometer score display (Counter-style, data-value driven) ── */
+  .snum{display:inline-block !important;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .snum.lead{color:var(--cyan) !important}
+  .odo-wrap{display:inline-flex;vertical-align:middle;height:1em;line-height:1em;overflow:hidden}
+  .odo-wrap div{overflow:hidden;height:1em}
+  .odo-wrap b{
+    display:block;
+    font-weight:inherit;
+    font-style:normal;
+    text-align:center;
+    min-width:.6em;
+  }
+  .odo-wrap b::before{
+    content:'0\A1\A2\A3\A4\A5\A6\A7\A8\A9';
+    white-space:pre;
+    display:block;
+    line-height:1em;
+    transition:margin-top .45s cubic-bezier(.75,.15,.6,1.15);
+  }
+  .odo-wrap b.blur::before{
+    transition:margin-top .35s cubic-bezier(.75,.15,.6,1.15);
+    filter:blur(1.5px);
+  }
+  .odo-wrap b[data-value="0"]::before{margin-top:0}
+  .odo-wrap b[data-value="1"]::before{margin-top:-1em}
+  .odo-wrap b[data-value="2"]::before{margin-top:-2em}
+  .odo-wrap b[data-value="3"]::before{margin-top:-3em}
+  .odo-wrap b[data-value="4"]::before{margin-top:-4em}
+  .odo-wrap b[data-value="5"]::before{margin-top:-5em}
+  .odo-wrap b[data-value="6"]::before{margin-top:-6em}
+  .odo-wrap b[data-value="7"]::before{margin-top:-7em}
+  .odo-wrap b[data-value="8"]::before{margin-top:-8em}
+  .odo-wrap b[data-value="9"]::before{margin-top:-9em}
   @keyframes spin{to{transform:rotate(360deg)}}
   [data-tip]{cursor:help}
   #tt{position:fixed;z-index:9999;background:#0b1629;color:#e2e8f0;font-family:"DM Sans",sans-serif;font-size:.72rem;line-height:1.5;white-space:pre-wrap;max-width:265px;min-width:130px;padding:9px 13px;border-radius:9px;border:1px solid #243654;box-shadow:0 6px 28px rgba(0,0,0,.65);pointer-events:none;opacity:0;transition:opacity .12s}
@@ -333,7 +360,7 @@ function render(data) {
     '<th style="width:56px">MORE</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>';
 
-  // Odometer: set initial positions instantly, then animate only changed digits
+  // Odometer: animate score changes. CSS transition handles the roll automatically.
   games.forEach(function(g) {
     if (g.status !== 'inprogress') return;
     var curA = parseInt(g.awayScore) || 0;
@@ -342,18 +369,9 @@ function render(data) {
     var elA  = document.getElementById('odo-' + g.espnId + '-away');
     var elH  = document.getElementById('odo-' + g.espnId + '-home');
 
-    if (!prev) {
-      // First render — set digits immediately without animation
-      if (elA) setOdoImmediate(elA, curA);
-      if (elH) setOdoImmediate(elH, curH);
-    } else if (prev.away !== curA || prev.home !== curH) {
-      // Score changed — animate changed digits after 1 frame
-      if (elA && prev.away !== curA) requestAnimationFrame(function() { animateOdo(elA, curA); });
-      if (elH && prev.home !== curH) requestAnimationFrame(function() { animateOdo(elH, curH); });
-    } else {
-      // No change — just set immediately (fresh DOM, same score)
-      if (elA) setOdoImmediate(elA, curA);
-      if (elH) setOdoImmediate(elH, curH);
+    if (prev && (prev.away !== curA || prev.home !== curH)) {
+      if (elA) animateOdo(elA, curA);
+      if (elH) animateOdo(elH, curH);
     }
 
     scoreCache[g.espnId] = { away: curA, home: curH };
@@ -407,52 +425,41 @@ function evalDetail(g, spreadFav, spread, total, ouPick) {
 function pickIcon(r) { return r==='win'?'✅':r==='winning'?'🟢':r==='loss'?'❌':r==='losing'?'🔴':r==='push'?'➖':'⏳'; }
 function pickColor(r) { return r==='win'||r==='winning'?'var(--green)':r==='loss'||r==='losing'?'var(--red)':r==='push'?'var(--yellow)':'var(--muted)'; }
 
-// Build odometer digit HTML — reels start at position 0, animated after paint
+// Build odometer HTML — each digit is a <b> with data-value, CSS handles margin-top
 function buildOdo(num) {
   var s = String(num || 0);
-  return s.split('').map(function(d) {
-    // Start at translateY(0) — we animate to correct position after DOM paint
-    return '<span class="odo-digit"><span class="odo-reel" data-digit="'+d+'" style="transform:translateY(0)">'+
-      '<span>0</span><span>1</span><span>2</span><span>3</span><span>4</span>'+
-      '<span>5</span><span>6</span><span>7</span><span>8</span><span>9</span>'+
-    '</span></span>';
+  var digits = s.split('').map(function(d) {
+    return '<b data-value="'+d+'"></b>';
   }).join('');
+  return '<div class="odo-wrap">'+digits+'</div>';
 }
 
-// Set all reels to their correct position immediately (no transition)
-function setOdoImmediate(el, num) {
-  var s = String(num || 0);
-  var reels = el.querySelectorAll('.odo-reel');
-  for (var i = 0; i < reels.length; i++) {
-    reels[i].style.transition = 'none';
-    reels[i].style.transform  = 'translateY(-' + (s[i] || 0) + '00%)';
-    reels[i].dataset.digit    = s[i] || '0';
-  }
-}
-
-// Animate odometer to new score with rolling transition
+// Update odometer digits with Counter-style blur on big jumps
 function animateOdo(el, newScore) {
   var newStr = String(newScore || 0);
-  var reels  = el.querySelectorAll('.odo-reel');
-
-  // Rebuild if digit count changed (e.g. 99→100), then set immediately
-  if (reels.length !== newStr.length) {
+  var bs     = el.querySelectorAll('b');
+  // Rebuild if digit count changed (e.g. 99→100)
+  if (bs.length !== newStr.length) {
     el.innerHTML = buildOdo(newScore);
-    requestAnimationFrame(function() {
-      setOdoImmediate(el, newScore);
-    });
     return;
   }
-
-  for (var i = 0; i < reels.length; i++) {
-    var d = newStr[i];
-    if (reels[i].dataset.digit !== d) {
-      reels[i].dataset.digit = d;
-      reels[i].style.transition = 'transform .4s cubic-bezier(.22,.68,0,1.1)';
-      reels[i].style.transform  = 'translateY(-' + d + '00%)';
+  bs.forEach(function(b, i) {
+    var newD = parseInt(newStr[i] || 0);
+    var oldD = parseInt(b.dataset.value || 0);
+    if (oldD !== newD) {
+      var diff = Math.abs(newD - oldD);
+      b.setAttribute('data-value', newD);
+      if (diff > 3) b.classList.add('blur');
     }
-  }
+  });
 }
+
+// Remove blur class when transition ends (matches CodePen transitionend listener)
+document.addEventListener('transitionend', function(e) {
+  if (e.pseudoElement === '::before' && e.propertyName === 'margin-top') {
+    e.target.classList.remove('blur');
+  }
+});
 
 function renderRow(g, ev) {
   var picks=ev.picks, spreadFav=ev.spreadFav, spread=ev.spread, total=ev.total, ouPick=ev.ouPick;
