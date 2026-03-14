@@ -417,10 +417,15 @@ function evaluateGame(g) {
   }
   if (!picks.length) picks = ['No odds yet'];
   var totalOut = homeOut + awayOut;
-  var status = totalOut >= 5 ? 'avoid' : totalOut >= 2 ? 'sus' : 'go';
-  var stxt = totalOut >= 5 ? '🚫' : totalOut >= 2 ? '⚠️' : '✅';
-  var conf = totalOut >= 4 ? '⭐⭐' : totalOut >= 2 ? '⭐⭐⭐' : (spread && spread <= 6 ? '⭐⭐⭐⭐' : '⭐⭐⭐');
-  var clbl = totalOut >= 4 ? 'RISKY' : totalOut >= 2 ? 'VERIFY' : (spread && spread <= 6 ? 'STRONG' : 'STANDARD');
+  var hB2B = g.b2b && g.b2b.home;
+  var aB2B = g.b2b && g.b2b.away;
+  var b2bCount = (hB2B ? 1 : 0) + (aB2B ? 1 : 0);
+  // Risk score: injuries + b2b (b2b = 1.5 pts each, like 0.5 injury)
+  var riskScore = totalOut + (b2bCount * 1.5);
+  var status = riskScore >= 5 ? 'avoid' : riskScore >= 2 ? 'sus' : 'go';
+  var stxt   = riskScore >= 5 ? '🚫' : riskScore >= 2 ? '⚠️' : '✅';
+  var conf   = totalOut >= 4 ? '⭐⭐' : (totalOut >= 2 || b2bCount > 0) ? '⭐⭐⭐' : (spread && spread <= 6 ? '⭐⭐⭐⭐' : '⭐⭐⭐');
+  var clbl   = totalOut >= 4 ? 'RISKY' : totalOut >= 2 ? 'VERIFY' : b2bCount > 0 ? 'B2B CAUTION' : (spread && spread <= 6 ? 'STRONG' : 'STANDARD');
   var det = evalDetail(g, spreadFav, spread, total, ouPick);
   return {picks:picks, spreadFav:spreadFav, spread:spread, total:total, ouPick:ouPick, status:status, stxt:stxt, conf:conf, clbl:clbl, det:det, homeOut:homeOut, awayOut:awayOut};
 }
@@ -826,7 +831,15 @@ function renderRow(g, ev) {
     '<td>'+l3AvgCell+'</td>' +
     '<td>'+totalAvgCell+'</td>' +
     '<td><div class="line-val" style="white-space:pre-line">'+lineTxt+'</div></td>' +
-    '<td><div class="badge '+(homeOut+awayOut>0?'avoid':'go')+'" style="font-size:.85rem">'+(homeOut+awayOut>0?'🔴':'✅')+'</div></td>' +
+    (function(){
+      var hB2B = g.b2b && g.b2b.home;
+      var aB2B = g.b2b && g.b2b.away;
+      if (!hB2B && !aB2B) return '<td><div class="badge go" style="font-size:.85rem" title="Both teams rested">✅</div></td>';
+      var txt = '';
+      if (hB2B) txt += g.home+' B2B ';
+      if (aB2B) txt += g.away+' B2B';
+      return '<td><div class="badge avoid" style="font-size:.75rem;padding:3px 6px" title="Back-to-back fatigue">🔄 '+txt.trim()+'</div></td>';
+    })()+
     '<td>'+lineMoveCell+'</td>' +
     '<td><div class="badge '+bc+'">'+stxt+'</div></td>' +
     '<td style="text-align:center"><div class="conf-stars">'+conf+'</div><div class="conf-lbl">'+clbl+'</div></td>' +
