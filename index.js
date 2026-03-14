@@ -359,6 +359,7 @@ async function fetchTeamSeasonStats(abbr) {
       date:    ev.date?.slice(0, 10),
       win,
       isHome,
+      total: scored + conceded,  // used for O/U hit rate
     });
   }
 
@@ -423,6 +424,8 @@ async function fetchTeamSeasonStats(abbr) {
       conceded: avg([...home.conceded, ...away.conceded]),
       games:    home.scored.length + away.scored.length,
     },
+    // Raw totals for O/U hit rate calculation
+    gameTotals: gameResults.map(g => g.total),
   };
 
   teamStatsCache[abbr] = result;
@@ -798,6 +801,26 @@ async function assembleGameData(dateStr) {
         return {
           home: hDates.includes(yStr),
           away: aDates.includes(yStr),
+        };
+      })(),
+      // O/U hit rate: how often each team's games go over/under a given line
+      ouRecord: (() => {
+        const line = finalOdds?.total;
+        if (!line) return null;
+        function calcOURecord(totals, n) {
+          if (!totals?.length) return null;
+          const recent = totals.slice(-n);
+          const over  = recent.filter(t => t > line).length;
+          const under = recent.filter(t => t < line).length;
+          const push  = recent.filter(t => t === line).length;
+          return { over, under, push, games: recent.length };
+        }
+        const hTotals = seasonStats[game.home]?.gameTotals;
+        const aTotals = seasonStats[game.away]?.gameTotals;
+        return {
+          line,
+          home: { season: calcOURecord(hTotals, 82), last10: calcOURecord(hTotals, 10) },
+          away: { season: calcOURecord(aTotals, 82), last10: calcOURecord(aTotals, 10) },
         };
       })(),
       // Rich data from ESPN summary (today's games only)
